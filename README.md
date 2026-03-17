@@ -140,8 +140,8 @@ export function onUpdate(dt) {
   cube.rotate(0, dt * 45, 0);
 
   // Input
-  if (Input.keyDown("w")) cube.translate(0, 0, -dt * 3);
-  if (Input.keyDown("s")) cube.translate(0, 0, dt * 3);
+  if (Input.keyDown("W")) cube.translate(0, 0, -dt * 3);
+  if (Input.keyDown("S")) cube.translate(0, 0, dt * 3);
 
   // Raycasting
   if (Input.mouseButtonDown(0)) {
@@ -175,8 +175,8 @@ player.setColor(0.2, 0.8, 1.0, 1.0);
 player.layer = 1;
 
 export function onUpdate(dt) {
-  if (Input.keyDown("a")) player.x -= dt * 400;
-  if (Input.keyDown("d")) player.x += dt * 400;
+  if (Input.keyDown("A")) player.x -= dt * 400;
+  if (Input.keyDown("D")) player.x += dt * 400;
 
   Canvas.text("SCORE: 100", 10, 10, 2.0, 1.0, 1.0, 1.0, 1.0);
 }
@@ -240,6 +240,8 @@ export function onUpdate(dt) {
 | `Input.mouseButtonDown(btn)` | True while mouse button held |
 | `Input.mousePosition()` | Returns Vector3 (x, y, 0) |
 | `Input.mouseDelta()` | Returns Vector3 (dx, dy, 0) |
+| `Input.lockCursor()` | Lock the mouse cursor to the center |
+| `Input.unlockCursor(key)` | Unlock the mouse cursor |
 
 #### GUI (3D Overlay)
 
