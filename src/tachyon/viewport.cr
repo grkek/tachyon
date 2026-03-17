@@ -96,7 +96,7 @@ module Tachyon
     private def add_default_light
       dir_light = Renderer::Light.new(
         type: Renderer::Light::Type::Directional,
-        direction: Math::Vector3.new(-0.5f32, -1.0f32, -0.3f32),
+        direction: Math::Vector3.new(0.5f32, -1.0f32, -0.5f32),
         color: Math::Vector3.new(1.0f32, 0.95f32, 0.9f32),
         intensity: 2.0f32
       )
@@ -252,16 +252,23 @@ module Tachyon
 
     private def render_shadow_pass : Math::Matrix4
       light_space_matrix = Math::Matrix4.identity
+
       if shadow_map = @shadow_map
         if dir = @light_manager.directional
-          light_space_matrix = dir.shadow_view_projection
+          focus = @camera.target
+          distance = (@camera.position - @camera.target).magnitude
+          radius = ::Math.max(distance * 2.0f32, 50.0f32)
+          light_space_matrix = dir.shadow_view_projection(focus, radius)
           shadow_map.begin_pass(light_space_matrix)
+
           @scene.each_renderable do |node|
             shadow_map.render_node(node)
           end
+
           shadow_map.end_pass
         end
       end
+
       light_space_matrix
     end
 

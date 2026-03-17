@@ -40,11 +40,10 @@ module Tachyon
         shader.set_float("#{prefix}.outerCutoff", @outer_cutoff)
       end
 
-      def shadow_view_projection : Math::Matrix4
-        # Only for directional lights
-        light_proj = Math::Matrix4.orthographic(-10.0f32, 10.0f32, -10.0f32, 10.0f32, 0.1f32, 50.0f32)
-        light_pos = @direction * -20.0f32
-        light_view = Math::Matrix4.look_at(light_pos, Math::Vector3.zero, Math::Vector3.new(0.0f32, 1.0f32, 0.0f32))
+      def shadow_view_projection(focus : Math::Vector3 = Math::Vector3.zero, radius : Float32 = 50.0f32) : Math::Matrix4
+        light_proj = Math::Matrix4.orthographic(-radius, radius, -radius, radius, 0.1f32, radius * 4.0f32)
+        light_pos = focus + (@direction * -radius * 2.0f32)
+        light_view = Math::Matrix4.look_at(light_pos, focus, Math::Vector3.new(0.0f32, 1.0f32, 0.0f32))
         light_proj * light_view
       end
     end
