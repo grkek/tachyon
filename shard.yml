@@ -1,0 +1,18 @@
+name: tachyon
+version: 0.1.0
+
+authors:
+  - Giorgi Kavrelishvili <giorgi.kavrelishvili@pm.me>
+
+dependencies:
+  gtk4:
+    github: hugopl/gtk4.cr
+
+  medusa:
+    github: grkek/medusa
+
+postinstall: make clean && make
+
+crystal: '>= 1.18.2'
+
+license: MIT
