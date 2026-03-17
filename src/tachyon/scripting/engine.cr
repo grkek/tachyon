@@ -14,7 +14,7 @@ module Tachyon
       @light_manager : Renderer::LightManager
       @canvas : Renderer::Canvas? = nil
       @audio : Audio::Engine? = nil
-      @module_def : QuickJS::JSModuleDef = Pointer(Void).null
+      @module_definition : QuickJS::JSModuleDef = Pointer(Void).null
       @module_namespace : QuickJS::JSValue = QuickJS::JSValue.new
       @has_module_namespace : Bool = false
       @context : QuickJS::JSContext = Pointer(Void).null
@@ -33,11 +33,21 @@ module Tachyon
 
       def register(context : Medusa::Context)
         @context = context.to_unsafe
-        rt = context.runtime
 
-        LibTachyonBridge.TachyonBridge_InitClasses(rt)
+        LibTachyonBridge.TachyonBridge_InitClasses(context.runtime)
+
+        @module_definition = LibTachyonBridge.TachyonBridge_RegisterModule(@context)
         register_callbacks
-        @module_def = LibTachyonBridge.TachyonBridge_RegisterModule(@context)
+      end
+
+      def bind(context : Medusa::Context)
+        @context = context.to_unsafe
+        register_callbacks
+      end
+
+      def adopt_module(namespace : QuickJS::JSValue)
+        @module_namespace = namespace
+        @has_module_namespace = true
       end
 
       def load_script(context : Medusa::Context, source : String, filename : String = "game.js")
