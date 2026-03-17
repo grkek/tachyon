@@ -18,7 +18,7 @@ module Tachyon
         @keys_released.clear
         @mouse_buttons_pressed.clear
         @mouse_dx = 0.0f32
-        @mouse_dy = 0.0f32S
+        @mouse_dy = 0.0f32
       end
 
       def on_key_press(key : String)
