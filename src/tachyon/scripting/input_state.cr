@@ -13,27 +13,26 @@ module Tachyon
       @mouse_dx : Float32 = 0.0f32
       @mouse_dy : Float32 = 0.0f32
 
-      # Called at the start of each frame to clear per-frame events
       def begin_frame
         @keys_pressed.clear
         @keys_released.clear
         @mouse_buttons_pressed.clear
         @mouse_dx = 0.0f32
-        @mouse_dy = 0.0f32
+        @mouse_dy = 0.0f32S
       end
 
-      # GTK event handlers call these
       def on_key_press(key : String)
-        unless @keys_down.includes?(key)
-          @keys_pressed.add(key)
+        normalized = normalize_key(key)
+        unless @keys_down.includes?(normalized)
+          @keys_pressed.add(normalized)
         end
-
-        @keys_down.add(key)
+        @keys_down.add(normalized)
       end
 
       def on_key_release(key : String)
-        @keys_down.delete(key)
-        @keys_released.add(key)
+        normalized = normalize_key(key)
+        @keys_down.delete(normalized)
+        @keys_released.add(normalized)
       end
 
       def on_mouse_button_press(button : Int32)
@@ -46,13 +45,17 @@ module Tachyon
       end
 
       def on_mouse_move(x : Float32, y : Float32)
-        @mouse_dx = x - @mouse_x
-        @mouse_dy = y - @mouse_y
+        @mouse_dx += x - @mouse_x
+        @mouse_dy += y - @mouse_y
         @mouse_x = x
         @mouse_y = y
       end
 
-      # Queries from JS Input class
+      def reset_mouse_position(x : Float32, y : Float32)
+        @mouse_x = x
+        @mouse_y = y
+      end
+
       def key_down?(key : String) : Bool
         @keys_down.includes?(key)
       end
@@ -79,6 +82,16 @@ module Tachyon
 
       def mouse_delta : {Float32, Float32}
         {@mouse_dx, @mouse_dy}
+      end
+
+      private def normalize_key(key : String) : String
+        if key.size == 1
+          key.upcase
+        elsif key.size > 1
+          key[0].upcase.to_s + key[1..]
+        else
+          key
+        end
       end
     end
   end

@@ -7,6 +7,7 @@ module Tachyon
     getter scene : Scene::Graph
     getter camera : Renderer::Camera
     getter light_manager : Renderer::LightManager
+    getter cursor : Scripting::Cursor? = nil
 
     @shader : Renderer::Shader? = nil
     @default_texture : Renderer::Texture? = nil
@@ -144,6 +145,8 @@ module Tachyon
         Math::Vector3.new(0.9f32, 0.85f32, 0.7f32)
       )
       @skybox = skybox
+
+      @cursor = Scripting::Cursor.new(@area)
 
       @last_frame_time = Time.utc
       @realized = true

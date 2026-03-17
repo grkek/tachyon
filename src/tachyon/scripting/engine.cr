@@ -6,8 +6,9 @@ module Tachyon
       alias QuickJS = Medusa::Binding::QuickJS
 
       getter registry : HandleRegistry
-      getter input : InputState
+      getter input_state : InputState
       getter commands : Array(GUI::DrawCall) = [] of GUI::DrawCall
+      property cursor : Cursor? = nil
 
       @scene : Scene::Graph
       @camera : Renderer::Camera
@@ -21,7 +22,7 @@ module Tachyon
 
       def initialize(@scene : Scene::Graph, @camera : Renderer::Camera, @light_manager : Renderer::LightManager)
         @registry = HandleRegistry.new
-        @input = InputState.new
+        @input_state = InputState.new
       end
 
       def audio : Audio::Engine?
@@ -68,7 +69,7 @@ module Tachyon
 
       def call_on_update(dt : Float64)
         return unless @has_module_namespace
-        @input.begin_frame
+        @input_state.begin_frame
         LibTachyonBridge.TachyonBridge_CallOnUpdate(@context, @module_namespace, dt)
       end
 
@@ -105,7 +106,7 @@ module Tachyon
         scene = @scene
         registry = @registry
         camera = @camera
-        input = @input
+        input_state = @input_state
 
         # Geometry constructors
         set_callback(CallbackSlot::CreateCube, ->(w : Float32, h : Float32, d : Float32) {
@@ -357,35 +358,50 @@ module Tachyon
 
         # Input
         set_callback(CallbackSlot::InputKeyDown, ->(key : LibC::Char*) {
-          input.key_down?(String.new(key)) ? 1 : 0
+          input_state.key_down?(String.new(key)) ? 1 : 0
         })
 
         set_callback(CallbackSlot::InputKeyPressed, ->(key : LibC::Char*) {
-          input.key_pressed?(String.new(key)) ? 1 : 0
+          input_state.key_pressed?(String.new(key)) ? 1 : 0
         })
 
         set_callback(CallbackSlot::InputKeyReleased, ->(key : LibC::Char*) {
-          input.key_released?(String.new(key)) ? 1 : 0
+          input_state.key_released?(String.new(key)) ? 1 : 0
         })
 
         set_callback(CallbackSlot::InputMouseButtonDown, ->(btn : Int32) {
-          input.mouse_button_down?(btn) ? 1 : 0
+          input_state.mouse_button_down?(btn) ? 1 : 0
         })
 
         set_callback(CallbackSlot::InputMouseButtonPressed, ->(btn : Int32) {
-          input.mouse_button_pressed?(btn) ? 1 : 0
+          input_state.mouse_button_pressed?(btn) ? 1 : 0
         })
 
         set_callback(CallbackSlot::InputMousePosition, ->(x : Float32*, y : Float32*) {
-          mx, my = input.mouse_position
+          mx, my = input_state.mouse_position
           x.value = mx
           y.value = my
         })
 
         set_callback(CallbackSlot::InputMouseDelta, ->(dx : Float32*, dy : Float32*) {
-          mdx, mdy = input.mouse_delta
+          mdx, mdy = input_state.mouse_delta
           dx.value = mdx
           dy.value = mdy
+        })
+
+        cursor = @cursor
+        input_state = @input_state
+
+        set_callback(CallbackSlot::InputLockCursor, -> {
+          if c = cursor
+            c.lock(input_state)
+          end
+        })
+
+        set_callback(CallbackSlot::InputUnlockCursor, -> {
+          if c = cursor
+            c.unlock
+          end
         })
 
         # GUI

@@ -80,6 +80,8 @@ enum CallbackSlot
     CB_INPUT_MOUSE_BUTTON_PRESSED,
     CB_INPUT_MOUSE_POSITION,
     CB_INPUT_MOUSE_DELTA,
+    CB_INPUT_LOCK_CURSOR,
+    CB_INPUT_UNLOCK_CURSOR,
     CB_CREATE_CONE,
     CB_CREATE_TORUS,
     CB_LOAD_MESH,
@@ -865,12 +867,16 @@ static JSValue js_scene_clear(JSContext *ctx, JSValueConst this_val, int argc, J
     return JS_UNDEFINED;
 }
 
-static JSValue js_scene_pick(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue js_scene_pick(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
     double x = 0, y = 0;
-    if (argc >= 1) JS_ToFloat64(ctx, &x, argv[0]);
-    if (argc >= 2) JS_ToFloat64(ctx, &y, argv[1]);
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &x, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &y, argv[1]);
     uint32_t handle = call_ff_u32(CB_SCENE_PICK, (float)x, (float)y);
-    if (handle == 0) return JS_UNDEFINED;
+    if (handle == 0)
+        return JS_UNDEFINED;
     JSValue obj = JS_NewObjectClass(ctx, (int)js_tachyon_node_class_id);
     set_handle(obj, handle);
     return obj;
@@ -944,6 +950,18 @@ static JSValue js_input_mouse_delta(JSContext *ctx, JSValueConst this_val, int a
     float dx, dy;
     call_pp_void(CB_INPUT_MOUSE_DELTA, &dx, &dy);
     return js_vector3_new(ctx, dx, dy, 0);
+}
+
+static JSValue js_input_lock_cursor(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    call_void(CB_INPUT_LOCK_CURSOR);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_input_unlock_cursor(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    call_void(CB_INPUT_UNLOCK_CURSOR);
+    return JS_UNDEFINED;
 }
 
 // GUI.rect(x, y, w, h, r, g, b, a)
@@ -1234,9 +1252,11 @@ static JSValue js_camera_set_fov(JSContext *ctx, JSValueConst this_val, int argc
 }
 
 // Lighting
-static JSValue js_pointlight_constructor(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue js_pointlight_constructor(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
     float x = 0, y = 2, z = 0, r = 1, g = 1, b = 1, intensity = 1, range = 10;
-    if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+    if (argc >= 1 && !JS_IsUndefined(argv[0]))
+    {
         x = get_opt_float(ctx, argv[0], "x", 0);
         y = get_opt_float(ctx, argv[0], "y", 2);
         z = get_opt_float(ctx, argv[0], "z", 0);
@@ -1248,7 +1268,8 @@ static JSValue js_pointlight_constructor(JSContext *ctx, JSValueConst this_val, 
     }
     // Pass position as fff, color+intensity+range via separate calls
     uint32_t handle = call_fff_u32(CB_CREATE_POINT_LIGHT, x, y, z);
-    if (handle != 0) {
+    if (handle != 0)
+    {
         call_u32_fff_void(CB_LIGHT_SET_COLOR, handle, r, g, b);
         call_u32_f_void(CB_LIGHT_SET_RANGE, handle, range);
     }
@@ -1258,47 +1279,58 @@ static JSValue js_pointlight_constructor(JSContext *ctx, JSValueConst this_val, 
 }
 
 // Audio.play("path") — fire and forget
-static JSValue js_audio_play(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-    if (argc < 1) return JS_ThrowTypeError(ctx, "Audio.play requires a path");
+static JSValue js_audio_play(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "Audio.play requires a path");
     const char *path = JS_ToCString(ctx, argv[0]);
-    if (!path) return JS_EXCEPTION;
+    if (!path)
+        return JS_EXCEPTION;
     call_s_u32(CB_AUDIO_PLAY_SOUND, path);
     JS_FreeCString(ctx, path);
     return JS_UNDEFINED;
 }
 
 // Audio.load("path") — returns handle for control
-static JSValue js_audio_load(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-    if (argc < 1) return JS_ThrowTypeError(ctx, "Audio.load requires a path");
+static JSValue js_audio_load(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "Audio.load requires a path");
     const char *path = JS_ToCString(ctx, argv[0]);
-    if (!path) return JS_EXCEPTION;
+    if (!path)
+        return JS_EXCEPTION;
     uint32_t handle = call_s_u32(CB_AUDIO_LOAD_SOUND, path);
     JS_FreeCString(ctx, path);
-    if (handle == 0) return JS_UNDEFINED;
+    if (handle == 0)
+        return JS_UNDEFINED;
     JSValue obj = JS_NewObjectClass(ctx, (int)js_tachyon_node_class_id);
     set_handle(obj, handle);
     return obj;
 }
 
 // Audio.stop(handle)
-static JSValue js_audio_stop(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-    if (argc < 1) return JS_UNDEFINED;
+static JSValue js_audio_stop(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_UNDEFINED;
     uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
-    if (h) call_u32_void(CB_AUDIO_STOP_SOUND, h);
+    if (h)
+        call_u32_void(CB_AUDIO_STOP_SOUND, h);
     return JS_UNDEFINED;
 }
 
 // Audio.setVolume(handle, volume)
-static JSValue js_audio_set_volume(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-    if (argc < 2) return JS_UNDEFINED;
+static JSValue js_audio_set_volume(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
     uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
     double vol = 1.0;
     JS_ToFloat64(ctx, &vol, argv[1]);
-    if (h) call_u32_f_void(CB_AUDIO_SET_VOLUME, h, (float)vol);
+    if (h)
+        call_u32_f_void(CB_AUDIO_SET_VOLUME, h, (float)vol);
     return JS_UNDEFINED;
 }
-
-
 
 /* =========================================================================
  * Module init
@@ -1371,6 +1403,8 @@ static int js_tachyon_module_init(JSContext *ctx, JSModuleDef *m)
     JS_SetPropertyStr(ctx, input_obj, "mouseButtonPressed", JS_NewCFunction(ctx, js_input_mouse_button_pressed, "mouseButtonPressed", 1));
     JS_SetPropertyStr(ctx, input_obj, "mousePosition", JS_NewCFunction(ctx, js_input_mouse_position, "mousePosition", 0));
     JS_SetPropertyStr(ctx, input_obj, "mouseDelta", JS_NewCFunction(ctx, js_input_mouse_delta, "mouseDelta", 0));
+    JS_SetPropertyStr(ctx, input_obj, "lockCursor", JS_NewCFunction(ctx, js_input_lock_cursor, "lockCursor", 0));
+    JS_SetPropertyStr(ctx, input_obj, "unlockCursor", JS_NewCFunction(ctx, js_input_unlock_cursor, "unlockCursor", 0));
     JS_SetModuleExport(ctx, m, "Input", input_obj);
 
     // GUI

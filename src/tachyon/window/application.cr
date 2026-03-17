@@ -44,15 +44,16 @@ module Tachyon
         key_controller.key_pressed_signal.connect do |keyval, keycode, state|
           if engine = @engine
             key_name = Gdk.keyval_name(keyval)
-            engine.input.on_key_press(key_name) if key_name
+            engine.input_state.on_key_press(key_name) if key_name
           end
+
           false
         end
 
         key_controller.key_released_signal.connect do |keyval, keycode, state|
           if engine = @engine
             key_name = Gdk.keyval_name(keyval)
-            engine.input.on_key_release(key_name) if key_name
+            engine.input_state.on_key_release(key_name) if key_name
           end
         end
 
@@ -62,7 +63,7 @@ module Tachyon
 
         motion_controller.motion_signal.connect do |x, y|
           if engine = @engine
-            engine.input.on_mouse_move(x.to_f32, y.to_f32)
+            engine.input_state.on_mouse_move(x.to_f32, y.to_f32)
           end
         end
 
@@ -72,14 +73,15 @@ module Tachyon
 
         click_controller.pressed_signal.connect do |n_press, x, y|
           if engine = @engine
-            engine.input.on_mouse_button_press(0)
+            engine.input_state.on_mouse_button_press(0)
           end
+
           viewport.area.grab_focus
         end
 
         click_controller.released_signal.connect do |n_press, x, y|
           if engine = @engine
-            engine.input.on_mouse_button_release(0)
+            engine.input_state.on_mouse_button_release(0)
           end
         end
 
