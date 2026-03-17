@@ -3,7 +3,7 @@ module Tachyon
     Log = ::Log.for(self)
 
     getter id : String
-    getter gl_area : Gtk::GLArea
+    getter area : Gtk::GLArea
     getter scene : Scene::Graph
     getter camera : Renderer::Camera
     getter light_manager : Renderer::LightManager
@@ -23,7 +23,7 @@ module Tachyon
     @realized : Bool = false
     @before_render : Proc(Float64, Nil)? = nil
 
-    def initialize(@id : String, @gl_area : Gtk::GLArea)
+    def initialize(@id : String, @area : Gtk::GLArea)
       @scene = Scene::Graph.new
       @camera = Renderer::Camera.new(field_of_view: 60.0f32, near_plane: 0.1f32, far_plane: 100.0f32)
       @camera.position = Math::Vector3.new(0.0f32, 3.0f32, 6.0f32)
@@ -34,7 +34,7 @@ module Tachyon
     end
 
     def initialize(@id : String)
-      @gl_area = Gtk::GLArea.new
+      @area = Gtk::GLArea.new
       @scene = Scene::Graph.new
       @camera = Renderer::Camera.new(field_of_view: 60.0f32, near_plane: 0.1f32, far_plane: 100.0f32)
       @camera.position = Math::Vector3.new(0.0f32, 3.0f32, 6.0f32)
@@ -70,7 +70,7 @@ module Tachyon
 
     def destroy
       return unless @realized
-      @gl_area.make_current
+      @area.make_current
 
       @scene.destroy
       @shader.try(&.destroy)
@@ -104,21 +104,21 @@ module Tachyon
     end
 
     private def setup_gl_area
-      @gl_area.set_required_version(3, 3)
-      @gl_area.auto_render = false
-      @gl_area.has_depth_buffer = true
-      @gl_area.focusable = true
+      @area.set_required_version(3, 3)
+      @area.auto_render = false
+      @area.has_depth_buffer = true
+      @area.focusable = true
 
-      @gl_area.realize_signal.connect { on_realize }
-      @gl_area.unrealize_signal.connect { destroy }
-      @gl_area.render_signal.connect { |ctx| on_render }
-      @gl_area.add_tick_callback(->tick_callback(Gtk::Widget, Gdk::FrameClock))
+      @area.realize_signal.connect { on_realize }
+      @area.unrealize_signal.connect { destroy }
+      @area.render_signal.connect { |ctx| on_render }
+      @area.add_tick_callback(->tick_callback(Gtk::Widget, Gdk::FrameClock))
     end
 
     private def on_realize
       return if @realized
-      @gl_area.make_current
-      return if @gl_area.error
+      @area.make_current
+      return if @area.error
 
       LibGL.glEnable(LibGL::GL_DEPTH_TEST)
       LibGL.glEnable(LibGL::GL_CULL_FACE)
@@ -188,9 +188,9 @@ module Tachyon
     end
 
     private def update_viewport
-      @viewport_width = @gl_area.width
-      @viewport_height = @gl_area.height
-      scale = @gl_area.scale_factor
+      @viewport_width = @area.width
+      @viewport_height = @area.height
+      scale = @area.scale_factor
       @viewport_width *= scale
       @viewport_height *= scale
       @camera.scale_factor = scale
@@ -340,7 +340,7 @@ module Tachyon
     end
 
     private def tick_callback(_widget : Gtk::Widget, _clock : Gdk::FrameClock) : Bool
-      @gl_area.queue_render
+      @area.queue_render
       true
     end
   end

@@ -27,9 +27,9 @@ module Tachyon
         viewport = Viewport.new(id: "main")
         @viewport = viewport
 
-        viewport.gl_area.realize_signal.connect { on_viewport_ready(viewport) }
+        viewport.area.realize_signal.connect { on_viewport_ready(viewport) }
 
-        window.child = viewport.gl_area
+        window.child = viewport.area
         window.present
       end
 
@@ -56,7 +56,7 @@ module Tachyon
           end
         end
 
-        viewport.gl_area.add_controller(key_controller)
+        viewport.area.add_controller(key_controller)
 
         motion_controller = Gtk::EventControllerMotion.new
 
@@ -66,7 +66,7 @@ module Tachyon
           end
         end
 
-        viewport.gl_area.add_controller(motion_controller)
+        viewport.area.add_controller(motion_controller)
 
         click_controller = Gtk::GestureClick.new
 
@@ -74,7 +74,7 @@ module Tachyon
           if engine = @engine
             engine.input.on_mouse_button_press(0)
           end
-          viewport.gl_area.grab_focus
+          viewport.area.grab_focus
         end
 
         click_controller.released_signal.connect do |n_press, x, y|
@@ -83,7 +83,7 @@ module Tachyon
           end
         end
 
-        viewport.gl_area.add_controller(click_controller)
+        viewport.area.add_controller(click_controller)
       end
 
       private def setup_scripting(viewport : Viewport)
