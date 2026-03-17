@@ -69,8 +69,8 @@ module Tachyon
 
       def call_on_update(dt : Float64)
         return unless @has_module_namespace
-        @input_state.begin_frame
         LibTachyonBridge.TachyonBridge_CallOnUpdate(@context, @module_namespace, dt)
+        @input_state.begin_frame
       end
 
       def call_on_fixed_update(dt : Float64)
