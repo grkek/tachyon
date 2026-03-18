@@ -37,6 +37,7 @@ struct CrystalProc
     void *closure_data;
 
     bool isValid() const { return pointer != nullptr; }
+    bool isClosure() const { return closure_data != nullptr; }
 };
 
 /* =========================================================================
@@ -177,220 +178,294 @@ static CrystalProc g_callbacks[CB_MAX] = {};
 static void call_8f_void(CallbackSlot slot, float a, float b, float c, float d, float e, float f, float g, float h)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, float, float, float, float, float, float, float, float);
-    ((Fn)cb.pointer)(cb.closure_data, a, b, c, d, e, f, g, h);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, float, float, float, float, float, float, float, float);
+        ((Fn)cb.pointer)(cb.closure_data, a, b, c, d, e, f, g, h);
+    } else {
+        typedef void (*Fn)(float, float, float, float, float, float, float, float);
+        ((Fn)cb.pointer)(a, b, c, d, e, f, g, h);
+    }
 }
 
 // void fn(const char*, float, float, float, float, float, float, float)
 static void call_s7f_void(CallbackSlot slot, const char *s, float a, float b, float c, float d, float e, float f, float g)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, const char *, float, float, float, float, float, float, float);
-    ((Fn)cb.pointer)(cb.closure_data, s, a, b, c, d, e, f, g);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, const char *, float, float, float, float, float, float, float);
+        ((Fn)cb.pointer)(cb.closure_data, s, a, b, c, d, e, f, g);
+    } else {
+        typedef void (*Fn)(const char *, float, float, float, float, float, float, float);
+        ((Fn)cb.pointer)(s, a, b, c, d, e, f, g);
+    }
 }
 
 // uint32 fn(float, float, float)
 static uint32_t call_fff_u32(CallbackSlot slot, float a, float b, float c)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef uint32_t (*Fn)(void *, float, float, float);
-    return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef uint32_t (*Fn)(void *, float, float, float);
+        return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
+    } else {
+        typedef uint32_t (*Fn)(float, float, float);
+        return ((Fn)cb.pointer)(a, b, c);
+    }
 }
 
 // uint32 fn(float, int, int)
 static uint32_t call_fii_u32(CallbackSlot slot, float a, int b, int c)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef uint32_t (*Fn)(void *, float, int, int);
-    return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef uint32_t (*Fn)(void *, float, int, int);
+        return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
+    } else {
+        typedef uint32_t (*Fn)(float, int, int);
+        return ((Fn)cb.pointer)(a, b, c);
+    }
 }
 
 // uint32 fn(float, float)
 static uint32_t call_ff_u32(CallbackSlot slot, float a, float b)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef uint32_t (*Fn)(void *, float, float);
-    return ((Fn)cb.pointer)(cb.closure_data, a, b);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef uint32_t (*Fn)(void *, float, float);
+        return ((Fn)cb.pointer)(cb.closure_data, a, b);
+    } else {
+        typedef uint32_t (*Fn)(float, float);
+        return ((Fn)cb.pointer)(a, b);
+    }
 }
 
 // uint32 fn(float, float, int)
 static uint32_t call_ffi_u32(CallbackSlot slot, float a, float b, int c)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef uint32_t (*Fn)(void *, float, float, int);
-    return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef uint32_t (*Fn)(void *, float, float, int);
+        return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
+    } else {
+        typedef uint32_t (*Fn)(float, float, int);
+        return ((Fn)cb.pointer)(a, b, c);
+    }
 }
 
 // void fn(uint32)
 static void call_u32_void(CallbackSlot slot, uint32_t h)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t);
-    ((Fn)cb.pointer)(cb.closure_data, h);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, uint32_t);
+        ((Fn)cb.pointer)(cb.closure_data, h);
+    } else {
+        typedef void (*Fn)(uint32_t);
+        ((Fn)cb.pointer)(h);
+    }
 }
 
 // uint32 fn(const char*)
 static uint32_t call_s_u32(CallbackSlot slot, const char *s)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef uint32_t (*Fn)(void *, const char *);
-    return ((Fn)cb.pointer)(cb.closure_data, s);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef uint32_t (*Fn)(void *, const char *);
+        return ((Fn)cb.pointer)(cb.closure_data, s);
+    } else {
+        typedef uint32_t (*Fn)(const char *);
+        return ((Fn)cb.pointer)(s);
+    }
 }
 
 // void fn()
 static void call_void(CallbackSlot slot)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *);
-    ((Fn)cb.pointer)(cb.closure_data);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *);
+        ((Fn)cb.pointer)(cb.closure_data);
+    } else {
+        typedef void (*Fn)();
+        ((Fn)cb.pointer)();
+    }
 }
 
 // void fn(uint32, float, float, float)
 static void call_u32_fff_void(CallbackSlot slot, uint32_t h, float x, float y, float z)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t, float, float, float);
-    ((Fn)cb.pointer)(cb.closure_data, h, x, y, z);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, uint32_t, float, float, float);
+        ((Fn)cb.pointer)(cb.closure_data, h, x, y, z);
+    } else {
+        typedef void (*Fn)(uint32_t, float, float, float);
+        ((Fn)cb.pointer)(h, x, y, z);
+    }
 }
 
 // void fn(uint32, float*, float*, float*)
 static void call_u32_ppp_void(CallbackSlot slot, uint32_t h, float *x, float *y, float *z)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t, float *, float *, float *);
-    ((Fn)cb.pointer)(cb.closure_data, h, x, y, z);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, uint32_t, float *, float *, float *);
+        ((Fn)cb.pointer)(cb.closure_data, h, x, y, z);
+    } else {
+        typedef void (*Fn)(uint32_t, float *, float *, float *);
+        ((Fn)cb.pointer)(h, x, y, z);
+    }
 }
 
 // void fn(uint32, const char*)
 static void call_u32_s_void(CallbackSlot slot, uint32_t h, const char *s)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t, const char *);
-    ((Fn)cb.pointer)(cb.closure_data, h, s);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, uint32_t, const char *);
+        ((Fn)cb.pointer)(cb.closure_data, h, s);
+    } else {
+        typedef void (*Fn)(uint32_t, const char *);
+        ((Fn)cb.pointer)(h, s);
+    }
 }
 
 // void fn(uint32, int)
 static void call_u32_i_void(CallbackSlot slot, uint32_t h, int v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t, int);
-    ((Fn)cb.pointer)(cb.closure_data, h, v);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, uint32_t, int);
+        ((Fn)cb.pointer)(cb.closure_data, h, v);
+    } else {
+        typedef void (*Fn)(uint32_t, int);
+        ((Fn)cb.pointer)(h, v);
+    }
 }
 
 // int fn(uint32)
 static int call_u32_int(CallbackSlot slot, uint32_t h)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef int (*Fn)(void *, uint32_t);
-    return ((Fn)cb.pointer)(cb.closure_data, h);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef int (*Fn)(void *, uint32_t);
+        return ((Fn)cb.pointer)(cb.closure_data, h);
+    } else {
+        typedef int (*Fn)(uint32_t);
+        return ((Fn)cb.pointer)(h);
+    }
 }
 
 // void fn(uint32, float)
 static void call_u32_f_void(CallbackSlot slot, uint32_t h, float v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t, float);
-    ((Fn)cb.pointer)(cb.closure_data, h, v);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, uint32_t, float);
+        ((Fn)cb.pointer)(cb.closure_data, h, v);
+    } else {
+        typedef void (*Fn)(uint32_t, float);
+        ((Fn)cb.pointer)(h, v);
+    }
 }
 
 // uint32 fn()
 static uint32_t call_u32(CallbackSlot slot)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef uint32_t (*Fn)(void *);
-    return ((Fn)cb.pointer)(cb.closure_data);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef uint32_t (*Fn)(void *);
+        return ((Fn)cb.pointer)(cb.closure_data);
+    } else {
+        typedef uint32_t (*Fn)();
+        return ((Fn)cb.pointer)();
+    }
 }
 
 // int fn(const char*)
 static int call_s_int(CallbackSlot slot, const char *s)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef int (*Fn)(void *, const char *);
-    return ((Fn)cb.pointer)(cb.closure_data, s);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef int (*Fn)(void *, const char *);
+        return ((Fn)cb.pointer)(cb.closure_data, s);
+    } else {
+        typedef int (*Fn)(const char *);
+        return ((Fn)cb.pointer)(s);
+    }
 }
 
 // int fn(int)
 static int call_i_int(CallbackSlot slot, int v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return 0;
-    typedef int (*Fn)(void *, int);
-    return ((Fn)cb.pointer)(cb.closure_data, v);
+    if (!cb.isValid()) return 0;
+    if (cb.isClosure()) {
+        typedef int (*Fn)(void *, int);
+        return ((Fn)cb.pointer)(cb.closure_data, v);
+    } else {
+        typedef int (*Fn)(int);
+        return ((Fn)cb.pointer)(v);
+    }
 }
 
 // void fn(float*, float*)
 static void call_pp_void(CallbackSlot slot, float *a, float *b)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, float *, float *);
-    ((Fn)cb.pointer)(cb.closure_data, a, b);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, float *, float *);
+        ((Fn)cb.pointer)(cb.closure_data, a, b);
+    } else {
+        typedef void (*Fn)(float *, float *);
+        ((Fn)cb.pointer)(a, b);
+    }
 }
 
 // void fn(uint32, const char*, int)
 static void call_u32_s_i_void(CallbackSlot slot, uint32_t h, const char *s, int i)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t, const char *, int);
-    ((Fn)cb.pointer)(cb.closure_data, h, s, i);
-}
-
-// void fn(int, float, float, float, float, float, int)
-static void call_i_5f_i_void(CallbackSlot slot, int enabled, float a, float b, float c, float d, float e, int mode)
-{
-    auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, int, float, float, float, float, float, int);
-    ((Fn)cb.pointer)(cb.closure_data, enabled, a, b, c, d, e, mode);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, uint32_t, const char *, int);
+        ((Fn)cb.pointer)(cb.closure_data, h, s, i);
+    } else {
+        typedef void (*Fn)(uint32_t, const char *, int);
+        ((Fn)cb.pointer)(h, s, i);
+    }
 }
 
 // void fn(int)
-static void call_i_void(CallbackSlot slot, int v)
+static void call_i32_void(CallbackSlot slot, int v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid())
-        return;
-    typedef void (*Fn)(void *, uint32_t, int);
-    ((Fn)cb.pointer)(cb.closure_data, 0, v);
+    if (!cb.isValid()) return;
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void *, int);
+        ((Fn)cb.pointer)(cb.closure_data, v);
+    } else {
+        typedef void (*Fn)(int);
+        ((Fn)cb.pointer)(v);
+    }
 }
 
 /* =========================================================================
@@ -1098,7 +1173,7 @@ static JSValue js_scene_set_fog(JSContext *ctx, JSValueConst this_val, int argc,
     }
     JS_FreeValue(ctx, mode_prop);
 
-    call_i_void(CB_TOGGLE_FOG, 1);
+    call_i32_void(CB_TOGGLE_FOG, 1);
     call_8f_void(CB_SET_FOG_PARAMETERS,
                  (float)fog_r, (float)fog_g, (float)fog_b,
                  (float)near_val, (float)far_val, (float)density, (float)mode, 0.0f);
@@ -1108,7 +1183,7 @@ static JSValue js_scene_set_fog(JSContext *ctx, JSValueConst this_val, int argc,
 
 static JSValue js_scene_clear_fog(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    call_i_void(CB_TOGGLE_FOG, 0);
+    call_i32_void(CB_TOGGLE_FOG, 0);
     return JS_UNDEFINED;
 }
 
@@ -1969,7 +2044,7 @@ static JSValue js_config_set_shadow_resolution(JSContext *ctx, JSValueConst this
         return JS_ThrowTypeError(ctx, "setShadowResolution(resolution)");
     int32_t res = 4096;
     JS_ToInt32(ctx, &res, argv[0]);
-    call_u32_i_void(CB_SET_SHADOW_RESOLUTION, 0, res);
+    call_i32_void(CB_SET_SHADOW_RESOLUTION, res);
     return JS_UNDEFINED;
 }
 

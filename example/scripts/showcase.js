@@ -279,6 +279,8 @@ export function onStart() {
   Camera.setTarget(cameraTarget);
   Camera.setFOV(65);
 
+  Configuration.setShadowResolution(4096);
+
   fogEnabled = true;
   Scene.setFog({ color: [0.02, 0.015, 0.04], near: 5, far: 20, mode: "exponential", density: 0.04 });
 }
