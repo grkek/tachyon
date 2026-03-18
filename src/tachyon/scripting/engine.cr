@@ -113,7 +113,6 @@ module Tachyon
         camera = @camera
         canvas = @canvas
         commands = @commands
-        cursor = @cursor
         engine = self
         light_manager = @light_manager
         registry = @registry
@@ -126,7 +125,7 @@ module Tachyon
         register_property_callbacks(registry, scene)
         register_material_callbacks(registry)
         register_texture_callbacks(registry)
-        register_input_callbacks(input_state, cursor)
+        register_input_callbacks(input_state, engine)
         register_gui_callbacks(commands)
         register_canvas_callbacks(canvas, commands)
         register_sprite_callbacks(registry, canvas)
@@ -453,7 +452,7 @@ module Tachyon
       end
 
       # Keyboard and mouse input callbacks
-      private def register_input_callbacks(input_state, cursor)
+      private def register_input_callbacks(input_state, engine)
         set_callback(CallbackSlot::InputKeyDown, ->(key : LibC::Char*) {
           input_state.key_down?(String.new(key)) ? 1 : 0
         })
@@ -485,13 +484,13 @@ module Tachyon
         })
 
         set_callback(CallbackSlot::InputLockCursor, -> {
-          if cr = cursor
+          if cr = engine.viewport.try(&.cursor)
             cr.lock(input_state)
           end
         })
 
         set_callback(CallbackSlot::InputUnlockCursor, -> {
-          if cr = cursor
+          if cr = engine.viewport.try(&.cursor)
             cr.unlock
           end
         })
