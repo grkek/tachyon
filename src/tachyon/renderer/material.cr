@@ -19,6 +19,8 @@ module Tachyon
       property metallic_roughness_map : Texture? = nil # R=metallic, G=roughness (glTF convention)
       property ao_map : Texture? = nil
       property emissive_map : Texture? = nil
+      property texture_scale_x : Float32 = 1.0f32
+      property texture_scale_y : Float32 = 1.0f32
 
       def initialize(
         @albedo : Math::Vector3 = Math::Vector3.new(0.8f32, 0.8f32, 0.8f32),
@@ -48,6 +50,8 @@ module Tachyon
         shader.set_vector3("uMaterial.emissive", @emissive)
         shader.set_float("uMaterial.emissiveStrength", @emissive_strength)
         shader.set_float("uMaterial.opacity", @opacity)
+
+        shader.set_vector2("uTextureScale", @texture_scale_x, @texture_scale_y)
 
         # Bind textures
         has_albedo_map = @albedo_map ? 1 : 0

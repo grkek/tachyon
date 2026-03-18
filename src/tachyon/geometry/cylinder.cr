@@ -71,8 +71,8 @@ module Tachyon
 
         (0...segments).each do |seg|
           indices << bot_center
-          indices << bot_center + 2 + seg.to_u32
           indices << bot_center + 1 + seg.to_u32
+          indices << bot_center + 2 + seg.to_u32
         end
 
         {vertices, indices}

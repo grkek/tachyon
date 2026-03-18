@@ -56,6 +56,10 @@ enum CallbackSlot
     CB_SCENE_REMOVE,
     CB_SCENE_FIND,
     CB_SCENE_CLEAR,
+    CB_SCENE_PICK,
+    CB_SCENE_SAVE,
+    CB_SCENE_LOAD_FILE,
+    CB_SCENE_LOAD_ENVIRONMENT,
     CB_NODE_SET_POSITION,
     CB_NODE_GET_POSITION,
     CB_NODE_SET_ROTATION,
@@ -116,7 +120,50 @@ enum CallbackSlot
     CB_AUDIO_LOAD_SOUND,
     CB_AUDIO_STOP_SOUND,
     CB_AUDIO_SET_VOLUME,
-    CB_SCENE_PICK,
+    CB_NODE_LOAD_TEXTURE,
+    CB_NODE_SET_TEXTURE_SCALE,
+    CB_NODE_SET_MATERIAL_EMISSIVE,
+    CB_NODE_SET_MATERIAL_EMISSIVE_STRENGTH,
+    CB_SPRITE_SET_ATLAS,
+    CB_SPRITE_PLAY_ANIMATION,
+    CB_SPRITE_STOP_ANIMATION,
+    CB_SPRITE_SET_FRAME,
+    CB_PARTICLE_CREATE_EMITTER,
+    CB_PARTICLE_DESTROY_EMITTER,
+    CB_PARTICLE_SET_POSITION,
+    CB_PARTICLE_SET_DIRECTION,
+    CB_PARTICLE_SET_COLORS,
+    CB_PARTICLE_SET_SIZES,
+    CB_PARTICLE_SET_SPEED,
+    CB_PARTICLE_SET_LIFETIME,
+    CB_PARTICLE_SET_GRAVITY,
+    CB_PARTICLE_SET_RATE,
+    CB_PARTICLE_SET_SPREAD,
+    CB_PARTICLE_SET_ACTIVE,
+    CB_PARTICLE_EMIT_BURST,
+    CB_PARTICLE_LOAD_TEXTURE,
+    CB_TOGGLE_FOG,
+    CB_SET_FOG_PARAMETERS,
+    CB_TOGGLE_BLOOM,
+    CB_SET_BLOOM_PARAMETERS,
+    CB_TOGGLE_SSAO,
+    CB_SET_SSAO_PARAMETERS,
+    CB_TOGGLE_SHADOW,
+    CB_SET_SHADOW_RESOLUTION,
+    CB_TOGGLE_SKYBOX,
+    CB_SET_SKYBOX_TOP_COLOR,
+    CB_SET_SKYBOX_BOTTOM_COLOR,
+    CB_TOGGLE_VIGNETTE,
+    CB_SET_VIGNETTE_PARAMETERS,
+    CB_TOGGLE_CHROMATIC_ABERRATION,
+    CB_SET_CHROMATIC_ABERRATION_STRENGTH,
+    CB_TOGGLE_COLOR_GRADING,
+    CB_SET_COLOR_GRADING_PARAMETERS,
+    CB_TOGGLE_FXAA,
+    CB_SET_AMBIENT_COLOR,
+    CB_PIPELINE_TOGGLE_STAGE,
+    CB_PIPELINE_MOVE_STAGE,
+    CB_PIPELINE_REMOVE_STAGE,
     CB_MAX
 };
 
@@ -314,6 +361,36 @@ static void call_pp_void(CallbackSlot slot, float *a, float *b)
         return;
     typedef void (*Fn)(void *, float *, float *);
     ((Fn)cb.pointer)(cb.closure_data, a, b);
+}
+
+// void fn(uint32, const char*, int)
+static void call_u32_s_i_void(CallbackSlot slot, uint32_t h, const char *s, int i)
+{
+    auto &cb = g_callbacks[slot];
+    if (!cb.isValid())
+        return;
+    typedef void (*Fn)(void *, uint32_t, const char *, int);
+    ((Fn)cb.pointer)(cb.closure_data, h, s, i);
+}
+
+// void fn(int, float, float, float, float, float, int)
+static void call_i_5f_i_void(CallbackSlot slot, int enabled, float a, float b, float c, float d, float e, int mode)
+{
+    auto &cb = g_callbacks[slot];
+    if (!cb.isValid())
+        return;
+    typedef void (*Fn)(void *, int, float, float, float, float, float, int);
+    ((Fn)cb.pointer)(cb.closure_data, enabled, a, b, c, d, e, mode);
+}
+
+// void fn(int)
+static void call_i_void(CallbackSlot slot, int v)
+{
+    auto &cb = g_callbacks[slot];
+    if (!cb.isValid())
+        return;
+    typedef void (*Fn)(void *, uint32_t, int);
+    ((Fn)cb.pointer)(cb.closure_data, 0, v);
 }
 
 /* =========================================================================
@@ -807,6 +884,81 @@ static JSValue js_node_set_material_color(JSContext *ctx, JSValueConst this_val,
     return JS_UNDEFINED;
 }
 
+// node.loadTexture(path, slot)
+// slot: 0 = albedo, 1 = normal, 2 = metallicRoughness, 3 = ao, 4 = emissive
+static JSValue js_node_load_texture(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_tachyon_node_class_id);
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx, "loadTexture(path, slot)");
+    const char *path = JS_ToCString(ctx, argv[0]);
+    if (!path)
+        return JS_EXCEPTION;
+    int slot = 0;
+    JS_ToInt32(ctx, &slot, argv[1]);
+    call_u32_s_i_void(CB_NODE_LOAD_TEXTURE, h, path, slot);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_node_set_texture_scale(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_tachyon_node_class_id);
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx, "setTextureScale(x, y)");
+    double x, y;
+    JS_ToFloat64(ctx, &x, argv[0]);
+    JS_ToFloat64(ctx, &y, argv[1]);
+    call_u32_fff_void(CB_NODE_SET_TEXTURE_SCALE, h, (float)x, (float)y, 0);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_node_set_material_emissive(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_tachyon_node_class_id);
+    if (argc < 3)
+        return JS_ThrowTypeError(ctx, "setMaterialEmissive(r, g, b)");
+    double r, g, b;
+    JS_ToFloat64(ctx, &r, argv[0]);
+    JS_ToFloat64(ctx, &g, argv[1]);
+    JS_ToFloat64(ctx, &b, argv[2]);
+    call_u32_fff_void(CB_NODE_SET_MATERIAL_EMISSIVE, h, (float)r, (float)g, (float)b);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_node_set_material_emissive_strength(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_tachyon_node_class_id);
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "setMaterialEmissiveStrength(value)");
+    double val;
+    JS_ToFloat64(ctx, &val, argv[0]);
+    call_u32_f_void(CB_NODE_SET_MATERIAL_EMISSIVE_STRENGTH, h, (float)val);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_node_set_material_roughness(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_tachyon_node_class_id);
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "setMaterialRoughness(value)");
+    double val;
+    JS_ToFloat64(ctx, &val, argv[0]);
+    call_u32_f_void(CB_NODE_SET_MATERIAL_ROUGHNESS, h, (float)val);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_node_set_material_metallic(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_tachyon_node_class_id);
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "setMaterialMetallic(value)");
+    double val;
+    JS_ToFloat64(ctx, &val, argv[0]);
+    call_u32_f_void(CB_NODE_SET_MATERIAL_METALLIC, h, (float)val);
+    return JS_UNDEFINED;
+}
+
 static const JSCFunctionListEntry js_node_proto_funcs[] = {
     JS_CGETSET_DEF("position", js_node_get_position, js_node_set_position),
     JS_CGETSET_DEF("scale", js_node_get_scale, js_node_set_scale),
@@ -816,6 +968,12 @@ static const JSCFunctionListEntry js_node_proto_funcs[] = {
     JS_CFUNC_DEF("lookAt", 1, js_node_look_at),
     JS_CFUNC_DEF("destroy", 0, js_node_destroy),
     JS_CFUNC_DEF("setMaterialColor", 3, js_node_set_material_color),
+    JS_CFUNC_DEF("loadTexture", 2, js_node_load_texture),
+    JS_CFUNC_DEF("setTextureScale", 2, js_node_set_texture_scale),
+    JS_CFUNC_DEF("setMaterialEmissive", 3, js_node_set_material_emissive),
+    JS_CFUNC_DEF("setMaterialEmissiveStrength", 1, js_node_set_material_emissive_strength),
+    JS_CFUNC_DEF("setMaterialRoughness", 1, js_node_set_material_roughness),
+    JS_CFUNC_DEF("setMaterialMetallic", 1, js_node_set_material_metallic),
     JS_CGETSET_DEF("wireframe", NULL, js_node_set_wireframe),
 };
 
@@ -880,6 +1038,90 @@ static JSValue js_scene_pick(JSContext *ctx, JSValueConst this_val, int argc, JS
     JSValue obj = JS_NewObjectClass(ctx, (int)js_tachyon_node_class_id);
     set_handle(obj, handle);
     return obj;
+}
+
+// Scene.setFog({ color: [r,g,b], near, far, density, mode })
+// mode: "linear" (default), "exponential", "exponential2"
+static JSValue js_scene_set_fog(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "setFog requires an options object");
+
+    JSValueConst opts = argv[0];
+
+    double near_val = 10.0, far_val = 100.0, density = 0.01;
+    double fog_r = 0.7, fog_g = 0.7, fog_b = 0.7;
+    int mode = 0;
+
+    JSValue color_val = JS_GetPropertyStr(ctx, opts, "color");
+    if (JS_IsArray(ctx, color_val))
+    {
+        JSValue c0 = JS_GetPropertyUint32(ctx, color_val, 0);
+        JSValue c1 = JS_GetPropertyUint32(ctx, color_val, 1);
+        JSValue c2 = JS_GetPropertyUint32(ctx, color_val, 2);
+        JS_ToFloat64(ctx, &fog_r, c0);
+        JS_ToFloat64(ctx, &fog_g, c1);
+        JS_ToFloat64(ctx, &fog_b, c2);
+        JS_FreeValue(ctx, c0);
+        JS_FreeValue(ctx, c1);
+        JS_FreeValue(ctx, c2);
+    }
+    JS_FreeValue(ctx, color_val);
+
+    JSValue near_prop = JS_GetPropertyStr(ctx, opts, "near");
+    if (!JS_IsUndefined(near_prop))
+        JS_ToFloat64(ctx, &near_val, near_prop);
+    JS_FreeValue(ctx, near_prop);
+
+    JSValue far_prop = JS_GetPropertyStr(ctx, opts, "far");
+    if (!JS_IsUndefined(far_prop))
+        JS_ToFloat64(ctx, &far_val, far_prop);
+    JS_FreeValue(ctx, far_prop);
+
+    JSValue density_prop = JS_GetPropertyStr(ctx, opts, "density");
+    if (!JS_IsUndefined(density_prop))
+        JS_ToFloat64(ctx, &density, density_prop);
+    JS_FreeValue(ctx, density_prop);
+
+    JSValue mode_prop = JS_GetPropertyStr(ctx, opts, "mode");
+    if (JS_IsString(mode_prop))
+    {
+        const char *mode_str = JS_ToCString(ctx, mode_prop);
+        if (mode_str)
+        {
+            if (strcmp(mode_str, "exponential") == 0)
+                mode = 1;
+            else if (strcmp(mode_str, "exponential2") == 0)
+                mode = 2;
+            JS_FreeCString(ctx, mode_str);
+        }
+    }
+    JS_FreeValue(ctx, mode_prop);
+
+    call_i_void(CB_TOGGLE_FOG, 1);
+    call_8f_void(CB_SET_FOG_PARAMETERS,
+                 (float)fog_r, (float)fog_g, (float)fog_b,
+                 (float)near_val, (float)far_val, (float)density, (float)mode, 0.0f);
+
+    return JS_UNDEFINED;
+}
+
+static JSValue js_scene_clear_fog(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    call_i_void(CB_TOGGLE_FOG, 0);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_scene_load_environment(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "Scene.loadEnvironment(path)");
+    const char *path = JS_ToCString(ctx, argv[0]);
+    if (!path)
+        return JS_EXCEPTION;
+    call_s_u32(CB_SCENE_LOAD_ENVIRONMENT, path);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
 }
 
 /* =========================================================================
@@ -1196,6 +1438,89 @@ static JSValue js_sprite_destroy_fn(JSContext *ctx, JSValueConst this_val, int a
     return JS_UNDEFINED;
 }
 
+static JSValue js_sprite_set_atlas(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_sprite_class_id);
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx, "setAtlas(columns, rows)");
+    int columns = 1, rows = 1;
+    JS_ToInt32(ctx, &columns, argv[0]);
+    JS_ToInt32(ctx, &rows, argv[1]);
+    call_u32_fff_void(CB_SPRITE_SET_ATLAS, h, (float)columns, (float)rows, 0);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_sprite_set_frame(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_sprite_class_id);
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "setFrame(index)");
+    int frame = 0;
+    JS_ToInt32(ctx, &frame, argv[0]);
+    call_u32_i_void(CB_SPRITE_SET_FRAME, h, frame);
+    return JS_UNDEFINED;
+}
+
+// sprite.playAnimation({ frames: [0,1,2,3], fps: 12, loop: true })
+static JSValue js_sprite_play_animation(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_sprite_class_id);
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "playAnimation(options)");
+
+    JSValueConst opts = argv[0];
+    double fps = 12.0;
+    int loop = 1;
+
+    JSValue fps_prop = JS_GetPropertyStr(ctx, opts, "fps");
+    if (!JS_IsUndefined(fps_prop))
+        JS_ToFloat64(ctx, &fps, fps_prop);
+    JS_FreeValue(ctx, fps_prop);
+
+    JSValue loop_prop = JS_GetPropertyStr(ctx, opts, "loop");
+    if (!JS_IsUndefined(loop_prop))
+        loop = JS_ToBool(ctx, loop_prop);
+    JS_FreeValue(ctx, loop_prop);
+
+    // Build frames string: comma-separated frame indices
+    JSValue frames_prop = JS_GetPropertyStr(ctx, opts, "frames");
+    if (JS_IsArray(ctx, frames_prop))
+    {
+        JSValue len_val = JS_GetPropertyStr(ctx, frames_prop, "length");
+        int32_t len = 0;
+        JS_ToInt32(ctx, &len, len_val);
+        JS_FreeValue(ctx, len_val);
+
+        char frames_str[2048] = {0};
+        int pos = 0;
+        for (int32_t i = 0; i < len && pos < 2040; i++)
+        {
+            JSValue elem = JS_GetPropertyUint32(ctx, frames_prop, i);
+            int32_t frame_idx = 0;
+            JS_ToInt32(ctx, &frame_idx, elem);
+            JS_FreeValue(ctx, elem);
+            if (i > 0)
+                frames_str[pos++] = ',';
+            pos += snprintf(frames_str + pos, 2048 - pos, "%d", frame_idx);
+        }
+
+        // Encode: "frames_csv|fps|loop" as a single string, plus handle
+        char buf[2200];
+        snprintf(buf, sizeof(buf), "%s|%.2f|%d", frames_str, fps, loop);
+        call_u32_s_void(CB_SPRITE_PLAY_ANIMATION, h, buf);
+    }
+    JS_FreeValue(ctx, frames_prop);
+
+    return JS_UNDEFINED;
+}
+
+static JSValue js_sprite_stop_animation(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    uint32_t h = get_handle(ctx, this_val, js_sprite_class_id);
+    call_u32_void(CB_SPRITE_STOP_ANIMATION, h);
+    return JS_UNDEFINED;
+}
+
 static const JSCFunctionListEntry js_sprite_proto_funcs[] = {
     JS_CGETSET_DEF("x", js_sprite_get_x, js_sprite_set_x),
     JS_CGETSET_DEF("y", js_sprite_get_y, js_sprite_set_y),
@@ -1203,6 +1528,10 @@ static const JSCFunctionListEntry js_sprite_proto_funcs[] = {
     JS_CGETSET_DEF("layer", NULL, js_sprite_set_layer),
     JS_CFUNC_DEF("setColor", 4, js_sprite_set_color),
     JS_CFUNC_DEF("destroy", 0, js_sprite_destroy_fn),
+    JS_CFUNC_DEF("setAtlas", 2, js_sprite_set_atlas),
+    JS_CFUNC_DEF("setFrame", 1, js_sprite_set_frame),
+    JS_CFUNC_DEF("playAnimation", 1, js_sprite_play_animation),
+    JS_CFUNC_DEF("stopAnimation", 0, js_sprite_stop_animation),
 };
 
 // Camera
@@ -1332,6 +1661,491 @@ static JSValue js_audio_set_volume(JSContext *ctx, JSValueConst this_val, int ar
     return JS_UNDEFINED;
 }
 
+// Particles.createEmitter({ maxParticles })
+static JSValue js_particle_create_emitter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    int max_particles = 256;
+    if (argc >= 1 && JS_IsObject(argv[0]))
+    {
+        JSValue mp = JS_GetPropertyStr(ctx, argv[0], "maxParticles");
+        if (!JS_IsUndefined(mp))
+            JS_ToInt32(ctx, &max_particles, mp);
+        JS_FreeValue(ctx, mp);
+    }
+    uint32_t handle = call_fii_u32(CB_PARTICLE_CREATE_EMITTER, 0, max_particles, 0);
+    return JS_NewUint32(ctx, handle);
+}
+
+static JSValue js_particle_destroy_emitter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    call_u32_void(CB_PARTICLE_DESTROY_EMITTER, h);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_position(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    Vec3Data *v = js_vector3_get(ctx, argv[1]);
+    if (v)
+        call_u32_fff_void(CB_PARTICLE_SET_POSITION, h, v->x, v->y, v->z);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_direction(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    Vec3Data *v = js_vector3_get(ctx, argv[1]);
+    if (v)
+        call_u32_fff_void(CB_PARTICLE_SET_DIRECTION, h, v->x, v->y, v->z);
+    return JS_UNDEFINED;
+}
+
+// Particles.setColors(handle, startR, startG, startB, endR, endG, endB)
+static JSValue js_particle_set_colors(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 3)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    Vec3Data *start = js_vector3_get(ctx, argv[1]);
+    Vec3Data *end = js_vector3_get(ctx, argv[2]);
+    if (start && end)
+    {
+        // Pack 6 floats + 2 padding into call_8f_void via the handle embedded in first float
+        call_8f_void(CB_PARTICLE_SET_COLORS,
+                     *(float *)&h, start->x, start->y, start->z,
+                     end->x, end->y, end->z, 0);
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_sizes(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 3)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    double start_size, end_size;
+    JS_ToFloat64(ctx, &start_size, argv[1]);
+    JS_ToFloat64(ctx, &end_size, argv[2]);
+    call_u32_fff_void(CB_PARTICLE_SET_SIZES, h, (float)start_size, (float)end_size, 0);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_speed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 3)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    double min_speed, max_speed;
+    JS_ToFloat64(ctx, &min_speed, argv[1]);
+    JS_ToFloat64(ctx, &max_speed, argv[2]);
+    call_u32_fff_void(CB_PARTICLE_SET_SPEED, h, (float)min_speed, (float)max_speed, 0);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_lifetime(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 3)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    double min_life, max_life;
+    JS_ToFloat64(ctx, &min_life, argv[1]);
+    JS_ToFloat64(ctx, &max_life, argv[2]);
+    call_u32_fff_void(CB_PARTICLE_SET_LIFETIME, h, (float)min_life, (float)max_life, 0);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_gravity(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    Vec3Data *v = js_vector3_get(ctx, argv[1]);
+    if (v)
+        call_u32_fff_void(CB_PARTICLE_SET_GRAVITY, h, v->x, v->y, v->z);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_rate(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    double rate;
+    JS_ToFloat64(ctx, &rate, argv[1]);
+    call_u32_f_void(CB_PARTICLE_SET_RATE, h, (float)rate);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_spread(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    double spread;
+    JS_ToFloat64(ctx, &spread, argv[1]);
+    call_u32_f_void(CB_PARTICLE_SET_SPREAD, h, (float)spread);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_active(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    call_u32_i_void(CB_PARTICLE_SET_ACTIVE, h, JS_ToBool(ctx, argv[1]));
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_emit_burst(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    int count = 10;
+    JS_ToInt32(ctx, &count, argv[1]);
+    call_u32_i_void(CB_PARTICLE_EMIT_BURST, h, count);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_load_texture(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h;
+    JS_ToUint32(ctx, &h, argv[0]);
+    const char *path = JS_ToCString(ctx, argv[1]);
+    if (!path)
+        return JS_EXCEPTION;
+    call_u32_s_void(CB_PARTICLE_LOAD_TEXTURE, h, path);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+}
+
+// Scene.save(path) / Scene.load(path)
+static JSValue js_scene_save(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "Scene.save(path)");
+    const char *path = JS_ToCString(ctx, argv[0]);
+    if (!path)
+        return JS_EXCEPTION;
+    call_s_u32(CB_SCENE_SAVE, path);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_scene_load_file(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "Scene.load(path)");
+    const char *path = JS_ToCString(ctx, argv[0]);
+    if (!path)
+        return JS_EXCEPTION;
+    call_s_u32(CB_SCENE_LOAD_FILE, path);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+}
+
+// Debug
+static JSValue js_debug_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    fprintf(stderr, "[Log] ");
+    for (int i = 0; i < argc; i++)
+    {
+        const char *str = JS_ToCString(ctx, argv[i]);
+        if (str)
+        {
+            fprintf(stderr, "%s", str);
+            JS_FreeCString(ctx, str);
+        }
+        if (i < argc - 1)
+            fprintf(stderr, " ");
+    }
+    fprintf(stderr, "\n");
+    return JS_UNDEFINED;
+}
+
+static JSValue js_debug_warning(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    fprintf(stderr, "\033[33m[Warning] ");
+    for (int i = 0; i < argc; i++)
+    {
+        const char *str = JS_ToCString(ctx, argv[i]);
+        if (str)
+        {
+            fprintf(stderr, "%s", str);
+            JS_FreeCString(ctx, str);
+        }
+        if (i < argc - 1)
+            fprintf(stderr, " ");
+    }
+    fprintf(stderr, "\033[0m\n");
+    return JS_UNDEFINED;
+}
+
+static JSValue js_debug_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    fprintf(stderr, "\033[31m[Error] ");
+    for (int i = 0; i < argc; i++)
+    {
+        const char *str = JS_ToCString(ctx, argv[i]);
+        if (str)
+        {
+            fprintf(stderr, "%s", str);
+            JS_FreeCString(ctx, str);
+        }
+        if (i < argc - 1)
+            fprintf(stderr, " ");
+    }
+    fprintf(stderr, "\033[0m\n");
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleBloom()
+static JSValue js_config_toggle_bloom(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_BLOOM));
+}
+
+// Configuration.setBloomParameters(threshold, intensity)
+static JSValue js_config_set_bloom_params(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double threshold = 0.6, intensity = 0.4;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &threshold, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &intensity, argv[1]);
+    call_ff_u32(CB_SET_BLOOM_PARAMETERS, (float)threshold, (float)intensity);
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleSSAO()
+static JSValue js_config_toggle_ssao(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_SSAO));
+}
+
+// Configuration.setSSAOParameters(radius, bias)
+static JSValue js_config_set_ssao_params(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double radius = 0.5, bias = 0.025;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &radius, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &bias, argv[1]);
+    call_ff_u32(CB_SET_SSAO_PARAMETERS, (float)radius, (float)bias);
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleShadow()
+static JSValue js_config_toggle_shadow(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_SHADOW));
+}
+
+// Configuration.setShadowResolution(resolution)
+static JSValue js_config_set_shadow_resolution(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "setShadowResolution(resolution)");
+    int32_t res = 4096;
+    JS_ToInt32(ctx, &res, argv[0]);
+    call_u32_i_void(CB_SET_SHADOW_RESOLUTION, 0, res);
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleSkybox()
+static JSValue js_config_toggle_skybox(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_SKYBOX));
+}
+
+// Configuration.setSkyboxTopColor(r, g, b)
+static JSValue js_config_set_skybox_top_color(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double r = 0.4, g = 0.6, b = 0.9;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &r, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &g, argv[1]);
+    if (argc >= 3)
+        JS_ToFloat64(ctx, &b, argv[2]);
+    call_u32_fff_void(CB_SET_SKYBOX_TOP_COLOR, 0, (float)r, (float)g, (float)b);
+    return JS_UNDEFINED;
+}
+
+// Configuration.setSkyboxBottomColor(r, g, b)
+static JSValue js_config_set_skybox_bottom_color(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double r = 0.9, g = 0.85, b = 0.7;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &r, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &g, argv[1]);
+    if (argc >= 3)
+        JS_ToFloat64(ctx, &b, argv[2]);
+    call_u32_fff_void(CB_SET_SKYBOX_BOTTOM_COLOR, 1, (float)r, (float)g, (float)b);
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleVignette()
+static JSValue js_config_toggle_vignette(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_VIGNETTE));
+}
+
+// Configuration.setVignetteParameters(intensity, smoothness)
+static JSValue js_config_set_vignette_params(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double intensity = 0.4, smoothness = 0.5;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &intensity, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &smoothness, argv[1]);
+    call_ff_u32(CB_SET_VIGNETTE_PARAMETERS, (float)intensity, (float)smoothness);
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleChromaticAberration()
+static JSValue js_config_toggle_chromatic_aberration(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_CHROMATIC_ABERRATION));
+}
+
+// Configuration.setChromaticAberrationStrength(strength)
+static JSValue js_config_set_chromatic_strength(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double strength = 0.003;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &strength, argv[0]);
+    call_u32_f_void(CB_SET_CHROMATIC_ABERRATION_STRENGTH, 0, (float)strength);
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleColorGrading()
+static JSValue js_config_toggle_color_grading(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_COLOR_GRADING));
+}
+
+// Configuration.setColorGradingParameters(exposure, contrast, saturation, tintR, tintG, tintB)
+static JSValue js_config_set_color_grading_params(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double exposure = 1, contrast = 1, saturation = 1, tr = 1, tg = 1, tb = 1;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &exposure, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &contrast, argv[1]);
+    if (argc >= 3)
+        JS_ToFloat64(ctx, &saturation, argv[2]);
+    if (argc >= 4)
+        JS_ToFloat64(ctx, &tr, argv[3]);
+    if (argc >= 5)
+        JS_ToFloat64(ctx, &tg, argv[4]);
+    if (argc >= 6)
+        JS_ToFloat64(ctx, &tb, argv[5]);
+    call_8f_void(CB_SET_COLOR_GRADING_PARAMETERS,
+                 (float)exposure, (float)contrast, (float)saturation,
+                 (float)tr, (float)tg, (float)tb, 0, 0);
+    return JS_UNDEFINED;
+}
+
+// const isEnabled = Configuration.toggleFXAA()
+static JSValue js_config_toggle_fxaa(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return JS_NewBool(ctx, call_u32(CB_TOGGLE_FXAA));
+}
+
+// Configuration.setAmbientColor(r, g, b)
+static JSValue js_config_set_ambient_color(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    double r = 0.2, g = 0.2, b = 0.22;
+    if (argc >= 1)
+        JS_ToFloat64(ctx, &r, argv[0]);
+    if (argc >= 2)
+        JS_ToFloat64(ctx, &g, argv[1]);
+    if (argc >= 3)
+        JS_ToFloat64(ctx, &b, argv[2]);
+    call_fff_u32(CB_SET_AMBIENT_COLOR, (float)r, (float)g, (float)b);
+    return JS_UNDEFINED;
+}
+
+/* =========================================================================
+ * Pipeline — lets JS toggle, reorder, and remove pipeline stages
+ * ========================================================================= */
+
+// Pipeline.toggleStage(name, enabled)
+static JSValue js_pipeline_toggle_stage(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx, "Pipeline.toggleStage(name, enabled)");
+    const char *name = JS_ToCString(ctx, argv[0]);
+    if (!name)
+        return JS_EXCEPTION;
+    int enabled = JS_ToBool(ctx, argv[1]);
+    // Use call_u32_s_void pattern: reuse slot with (name, enabled)
+    auto &cb = g_callbacks[CB_PIPELINE_TOGGLE_STAGE];
+    if (cb.isValid())
+    {
+        typedef void (*Fn)(void *, const char *, int);
+        ((Fn)cb.pointer)(cb.closure_data, name, enabled);
+    }
+    JS_FreeCString(ctx, name);
+    return JS_UNDEFINED;
+}
+
+// Pipeline.moveStage(name, newIndex)
+static JSValue js_pipeline_move_stage(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx, "Pipeline.moveStage(name, index)");
+    const char *name = JS_ToCString(ctx, argv[0]);
+    if (!name)
+        return JS_EXCEPTION;
+    int32_t idx = 0;
+    JS_ToInt32(ctx, &idx, argv[1]);
+    auto &cb = g_callbacks[CB_PIPELINE_MOVE_STAGE];
+    if (cb.isValid())
+    {
+        typedef uint32_t (*Fn)(void *, const char *, int);
+        ((Fn)cb.pointer)(cb.closure_data, name, idx);
+    }
+    JS_FreeCString(ctx, name);
+    return JS_UNDEFINED;
+}
+
+// Pipeline.removeStage(name)
+static JSValue js_pipeline_remove_stage(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "Pipeline.removeStage(name)");
+    const char *name = JS_ToCString(ctx, argv[0]);
+    if (!name)
+        return JS_EXCEPTION;
+    call_s_u32(CB_PIPELINE_REMOVE_STAGE, name);
+    JS_FreeCString(ctx, name);
+    return JS_UNDEFINED;
+}
+
 /* =========================================================================
  * Module init
  * ========================================================================= */
@@ -1392,6 +2206,11 @@ static int js_tachyon_module_init(JSContext *ctx, JSModuleDef *m)
     JS_SetPropertyStr(ctx, scene_obj, "find", JS_NewCFunction(ctx, js_scene_find, "find", 1));
     JS_SetPropertyStr(ctx, scene_obj, "clear", JS_NewCFunction(ctx, js_scene_clear, "clear", 0));
     JS_SetPropertyStr(ctx, scene_obj, "pick", JS_NewCFunction(ctx, js_scene_pick, "pick", 2));
+    JS_SetPropertyStr(ctx, scene_obj, "setFog", JS_NewCFunction(ctx, js_scene_set_fog, "setFog", 1));
+    JS_SetPropertyStr(ctx, scene_obj, "clearFog", JS_NewCFunction(ctx, js_scene_clear_fog, "clearFog", 0));
+    JS_SetPropertyStr(ctx, scene_obj, "save", JS_NewCFunction(ctx, js_scene_save, "save", 1));
+    JS_SetPropertyStr(ctx, scene_obj, "load", JS_NewCFunction(ctx, js_scene_load_file, "load", 1));
+    JS_SetPropertyStr(ctx, scene_obj, "loadEnvironment", JS_NewCFunction(ctx, js_scene_load_environment, "loadEnvironment", 1));
     JS_SetModuleExport(ctx, m, "Scene", scene_obj);
 
     // Input
@@ -1454,6 +2273,59 @@ static int js_tachyon_module_init(JSContext *ctx, JSModuleDef *m)
     JS_SetPropertyStr(ctx, audio_obj, "setVolume", JS_NewCFunction(ctx, js_audio_set_volume, "setVolume", 2));
     JS_SetModuleExport(ctx, m, "Audio", audio_obj);
 
+    // Particles
+    JSValue particles_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, particles_obj, "createEmitter", JS_NewCFunction(ctx, js_particle_create_emitter, "createEmitter", 1));
+    JS_SetPropertyStr(ctx, particles_obj, "destroyEmitter", JS_NewCFunction(ctx, js_particle_destroy_emitter, "destroyEmitter", 1));
+    JS_SetPropertyStr(ctx, particles_obj, "setPosition", JS_NewCFunction(ctx, js_particle_set_position, "setPosition", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "setDirection", JS_NewCFunction(ctx, js_particle_set_direction, "setDirection", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "setColors", JS_NewCFunction(ctx, js_particle_set_colors, "setColors", 3));
+    JS_SetPropertyStr(ctx, particles_obj, "setSizes", JS_NewCFunction(ctx, js_particle_set_sizes, "setSizes", 3));
+    JS_SetPropertyStr(ctx, particles_obj, "setSpeed", JS_NewCFunction(ctx, js_particle_set_speed, "setSpeed", 3));
+    JS_SetPropertyStr(ctx, particles_obj, "setLifetime", JS_NewCFunction(ctx, js_particle_set_lifetime, "setLifetime", 3));
+    JS_SetPropertyStr(ctx, particles_obj, "setGravity", JS_NewCFunction(ctx, js_particle_set_gravity, "setGravity", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "setRate", JS_NewCFunction(ctx, js_particle_set_rate, "setRate", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "setSpread", JS_NewCFunction(ctx, js_particle_set_spread, "setSpread", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "setActive", JS_NewCFunction(ctx, js_particle_set_active, "setActive", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "emitBurst", JS_NewCFunction(ctx, js_particle_emit_burst, "emitBurst", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "loadTexture", JS_NewCFunction(ctx, js_particle_load_texture, "loadTexture", 2));
+    JS_SetModuleExport(ctx, m, "Particles", particles_obj);
+
+    // Debug
+    JSValue debug_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, debug_obj, "log", JS_NewCFunction(ctx, js_debug_log, "log", 1));
+    JS_SetPropertyStr(ctx, debug_obj, "warning", JS_NewCFunction(ctx, js_debug_warning, "warning", 1));
+    JS_SetPropertyStr(ctx, debug_obj, "error", JS_NewCFunction(ctx, js_debug_error, "error", 1));
+    JS_SetModuleExport(ctx, m, "Debug", debug_obj);
+
+    // Configuration
+    JSValue config_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, config_obj, "toggleBloom", JS_NewCFunction(ctx, js_config_toggle_bloom, "toggleBloom", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setBloomParameters", JS_NewCFunction(ctx, js_config_set_bloom_params, "setBloomParameters", 2));
+    JS_SetPropertyStr(ctx, config_obj, "toggleSSAO", JS_NewCFunction(ctx, js_config_toggle_ssao, "toggleSSAO", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setSSAOParameters", JS_NewCFunction(ctx, js_config_set_ssao_params, "setSSAOParameters", 2));
+    JS_SetPropertyStr(ctx, config_obj, "toggleShadow", JS_NewCFunction(ctx, js_config_toggle_shadow, "toggleShadow", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setShadowResolution", JS_NewCFunction(ctx, js_config_set_shadow_resolution, "setShadowResolution", 1));
+    JS_SetPropertyStr(ctx, config_obj, "toggleSkybox", JS_NewCFunction(ctx, js_config_toggle_skybox, "toggleSkybox", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setSkyboxTopColor", JS_NewCFunction(ctx, js_config_set_skybox_top_color, "setSkyboxTopColor", 3));
+    JS_SetPropertyStr(ctx, config_obj, "setSkyboxBottomColor", JS_NewCFunction(ctx, js_config_set_skybox_bottom_color, "setSkyboxBottomColor", 3));
+    JS_SetPropertyStr(ctx, config_obj, "toggleVignette", JS_NewCFunction(ctx, js_config_toggle_vignette, "toggleVignette", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setVignetteParameters", JS_NewCFunction(ctx, js_config_set_vignette_params, "setVignetteParameters", 2));
+    JS_SetPropertyStr(ctx, config_obj, "toggleChromaticAberration", JS_NewCFunction(ctx, js_config_toggle_chromatic_aberration, "toggleChromaticAberration", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setChromaticAberrationStrength", JS_NewCFunction(ctx, js_config_set_chromatic_strength, "setChromaticAberrationStrength", 1));
+    JS_SetPropertyStr(ctx, config_obj, "toggleColorGrading", JS_NewCFunction(ctx, js_config_toggle_color_grading, "toggleColorGrading", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setColorGradingParameters", JS_NewCFunction(ctx, js_config_set_color_grading_params, "setColorGradingParameters", 6));
+    JS_SetPropertyStr(ctx, config_obj, "toggleFXAA", JS_NewCFunction(ctx, js_config_toggle_fxaa, "toggleFXAA", 0));
+    JS_SetPropertyStr(ctx, config_obj, "setAmbientColor", JS_NewCFunction(ctx, js_config_set_ambient_color, "setAmbientColor", 3));
+    JS_SetModuleExport(ctx, m, "Configuration", config_obj);
+
+    // Pipeline
+    JSValue pipeline_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, pipeline_obj, "toggleStage", JS_NewCFunction(ctx, js_pipeline_toggle_stage, "toggleStage", 2));
+    JS_SetPropertyStr(ctx, pipeline_obj, "moveStage", JS_NewCFunction(ctx, js_pipeline_move_stage, "moveStage", 2));
+    JS_SetPropertyStr(ctx, pipeline_obj, "removeStage", JS_NewCFunction(ctx, js_pipeline_remove_stage, "removeStage", 1));
+    JS_SetModuleExport(ctx, m, "Pipeline", pipeline_obj);
+
     return 0;
 }
 
@@ -1504,13 +2376,17 @@ extern "C"
         JS_AddModuleExport(ctx, m, "Camera");
         JS_AddModuleExport(ctx, m, "PointLight");
         JS_AddModuleExport(ctx, m, "Audio");
+        JS_AddModuleExport(ctx, m, "Particles");
+        JS_AddModuleExport(ctx, m, "Debug");
+        JS_AddModuleExport(ctx, m, "Configuration");
+        JS_AddModuleExport(ctx, m, "Pipeline");
 
         return m;
     }
 
-    int TachyonBridge_CallOnStart(JSContext *ctx, JSValue module_ns)
+    int TachyonBridge_CallOnStart(JSContext *ctx, JSValue *module_ns)
     {
-        JSValue fn = JS_GetPropertyStr(ctx, module_ns, "onStart");
+        JSValue fn = JS_GetPropertyStr(ctx, *module_ns, "onStart");
         if (JS_IsFunction(ctx, fn))
         {
             JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 0, nullptr);
@@ -1523,9 +2399,9 @@ extern "C"
         return 0;
     }
 
-    int TachyonBridge_CallOnUpdate(JSContext *ctx, JSValue module_ns, double dt)
+    int TachyonBridge_CallOnUpdate(JSContext *ctx, JSValue *module_ns, double dt)
     {
-        JSValue fn = JS_GetPropertyStr(ctx, module_ns, "onUpdate");
+        JSValue fn = JS_GetPropertyStr(ctx, *module_ns, "onUpdate");
         if (JS_IsFunction(ctx, fn))
         {
             JSValue arg = JS_NewFloat64(ctx, dt);
@@ -1540,9 +2416,9 @@ extern "C"
         return 0;
     }
 
-    int TachyonBridge_CallOnFixedUpdate(JSContext *ctx, JSValue module_ns, double dt)
+    int TachyonBridge_CallOnFixedUpdate(JSContext *ctx, JSValue *module_ns, double dt)
     {
-        JSValue fn = JS_GetPropertyStr(ctx, module_ns, "onFixedUpdate");
+        JSValue fn = JS_GetPropertyStr(ctx, *module_ns, "onFixedUpdate");
         if (JS_IsFunction(ctx, fn))
         {
             JSValue arg = JS_NewFloat64(ctx, dt);

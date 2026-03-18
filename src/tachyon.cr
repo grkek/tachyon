@@ -2,6 +2,7 @@ require "gtk4"
 require "medusa"
 
 require "./tachyon/constants"
+require "./tachyon/configuration"
 require "./tachyon/math/**"
 require "./tachyon/renderer/**"
 require "./tachyon/audio/**"

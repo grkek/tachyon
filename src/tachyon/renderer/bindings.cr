@@ -32,10 +32,12 @@ lib LibGL
   # Buffer targets
   GL_ARRAY_BUFFER         = 0x8892_u32
   GL_ELEMENT_ARRAY_BUFFER = 0x8893_u32
+  GL_RENDERBUFFER         = 0x8D41_u32
 
   # Usage hints
   GL_STATIC_DRAW  = 0x88E4_u32
   GL_DYNAMIC_DRAW = 0x88E8_u32
+  GL_STREAM_DRAW  =     0x88E0
 
   # Data types
   GL_FLOAT         = 0x1406_u32
@@ -119,6 +121,11 @@ lib LibGL
   fun glBindBuffer(target : GLenum, buffer : GLuint) : Void
   fun glBufferData(target : GLenum, size : GLsizeiptr, data : Void*, usage : GLenum) : Void
   fun glDeleteBuffers(n : GLsizei, buffers : GLuint*) : Void
+  fun glGenRenderbuffers(n : Int32, renderbuffers : UInt32*) : Void
+  fun glBindRenderbuffer(target : UInt32, renderbuffer : UInt32) : Void
+  fun glRenderbufferStorage(target : UInt32, internalformat : UInt32, width : Int32, height : Int32) : Void
+  fun glFramebufferRenderbuffer(target : UInt32, attachment : UInt32, renderbuffertarget : UInt32, renderbuffer : UInt32) : Void
+  fun glDeleteRenderbuffers(n : Int32, renderbuffers : UInt32*) : Void
 
   # Vertex attributes
   fun glEnableVertexAttribArray(index : GLuint) : Void
@@ -127,6 +134,9 @@ lib LibGL
   # Draw
   fun glDrawArrays(mode : GLenum, first : GLint, count : GLsizei) : Void
   fun glDrawElements(mode : GLenum, count : GLsizei, type : GLenum, indices : Void*) : Void
+  fun glDrawArraysInstanced(mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei) : Void
+  fun glDrawElementsInstanced(mode : GLenum, count : GLsizei, type : GLenum, indices : Void*, instancecount : GLsizei) : Void
+  fun glVertexAttribDivisor(index : GLuint, divisor : GLuint) : Void
 
   # Textures
   GL_TEXTURE_2D                  = 0x0DE1_u32
@@ -138,6 +148,7 @@ lib LibGL
   GL_TEXTURE3                    = 0x84C3_u32
   GL_TEXTURE4                    = 0x84C4_u32
   GL_TEXTURE5                    = 0x84C5_u32
+  GL_TEXTURE6                    = 0x84C6_u32
 
   GL_RGB                = 0x1907_u32
   GL_RGBA               = 0x1908_u32
@@ -153,6 +164,7 @@ lib LibGL
   GL_R8                 = 0x8229_u32
   GL_RG                 = 0x8227_u32
   GL_RG8                = 0x822B_u32
+  GL_RG16F              = 0x822F_u32
   GL_RGB8               = 0x8051_u32
   GL_RGBA8              = 0x8058_u32
   GL_RGB16F             = 0x881B_u32
@@ -195,6 +207,7 @@ lib LibGL
   GL_DEPTH_ATTACHMENT     = 0x8D00_u32
   GL_COLOR_ATTACHMENT0    = 0x8CE0_u32
   GL_FRAMEBUFFER_COMPLETE = 0x8CD5_u32
+  GL_VIEWPORT             = 0x0BA2_u32
   GL_NONE                 =      0_u32
 
   fun glGenFramebuffers(n : GLsizei, framebuffers : GLuint*) : Void

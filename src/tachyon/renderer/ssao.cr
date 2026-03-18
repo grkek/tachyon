@@ -1,11 +1,12 @@
 module Tachyon
   module Renderer
+    # Screen-space ambient occlusion renderer
     class SSAO
       Log = ::Log.for(self)
 
-      @fbo : LibGL::GLuint = 0_u32
+      @frame_buffer : LibGL::GLuint = 0_u32
       @texture : LibGL::GLuint = 0_u32
-      @blur_fbo : LibGL::GLuint = 0_u32
+      @blur_frame_buffer : LibGL::GLuint = 0_u32
       @blur_texture : LibGL::GLuint = 0_u32
       @noise_texture : LibGL::GLuint = 0_u32
       @shader : Shader
@@ -13,28 +14,86 @@ module Tachyon
       @width : Int32 = 0
       @height : Int32 = 0
 
-      property radius : Float32 = 0.5f32
-      property bias : Float32 = 0.025f32
+      property radius : Float32 = 0.3f32
+      property bias : Float32 = 0.035f32
       property enabled : Bool = true
 
       def initialize
-        @shader = Shader.new(PostProcess::QUAD_VERT, SSAO_FRAG)
-        @blur_shader = Shader.new(PostProcess::QUAD_VERT, SSAO_BLUR_FRAG)
+        # Load shaders from files instead of embedded constants
+        quad_vert = Shader.load_file("quad.vert")
+        @shader = Shader.new(quad_vert, Shader.load_file("ssao.frag"))
+        @blur_shader = Shader.new(quad_vert, Shader.load_file("ssao_blur.frag"))
+        @kernel = [] of Math::Vector3
         generate_noise_texture
         generate_sample_kernel
       end
 
+      # Resize FBOs when viewport changes
       def resize(width : Int32, height : Int32)
         return if width == @width && height == @height
         @width = width
         @height = height
         cleanup
-        create_single_channel_fbo(pointerof(@fbo), pointerof(@texture), width, height)
-        create_single_channel_fbo(pointerof(@blur_fbo), pointerof(@blur_texture), width, height)
+        create_single_channel_frame_buffer(pointerof(@frame_buffer), pointerof(@texture), width, height)
+        create_single_channel_frame_buffer(pointerof(@blur_frame_buffer), pointerof(@blur_texture), width, height)
       end
 
+      # Return the blurred SSAO texture
       def texture : LibGL::GLuint
         @blur_texture
+      end
+
+      # Run the SSAO pass and blur
+      def apply(quad_vao : LibGL::GLuint, depth_texture : LibGL::GLuint,
+                projection : Math::Matrix4, view : Math::Matrix4,
+                width : Int32, height : Int32)
+        return unless @enabled
+        resize(width, height)
+
+        prev_frame_buffer = 0_i32
+        LibGL.glGetIntegerv(LibGL::GL_FRAMEBUFFER_BINDING, pointerof(prev_frame_buffer))
+
+        # SSAO pass
+        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @frame_buffer)
+        LibGL.glViewport(0, 0, width, height)
+        LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
+
+        @shader.use
+        @shader.set_int("uDepth", 0)
+        @shader.set_int("uNoise", 1)
+        @shader.set_matrix4("uProjection", projection)
+        @shader.set_matrix4("uView", view)
+        @shader.set_vector2("uNoiseScale", width.to_f32 / 4.0f32, height.to_f32 / 4.0f32)
+        @shader.set_float("uRadius", @radius)
+        @shader.set_float("uBias", @bias)
+
+        @kernel.each_with_index do |sample, index|
+          @shader.set_vector3("uSamples[#{index}]", sample)
+        end
+
+        LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, depth_texture)
+        LibGL.glActiveTexture(LibGL::GL_TEXTURE1)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @noise_texture)
+
+        LibGL.glBindVertexArray(quad_vao)
+        LibGL.glDrawArrays(LibGL::GL_TRIANGLES, 0, 6)
+        LibGL.glBindVertexArray(0)
+
+        # Blur pass
+        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @blur_frame_buffer)
+        LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
+
+        @blur_shader.use
+        @blur_shader.set_int("uSSAO", 0)
+        LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @texture)
+
+        LibGL.glBindVertexArray(quad_vao)
+        LibGL.glDrawArrays(LibGL::GL_TRIANGLES, 0, 6)
+        LibGL.glBindVertexArray(0)
+
+        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, prev_frame_buffer.to_u32)
       end
 
       def destroy
@@ -45,9 +104,7 @@ module Tachyon
       end
 
       private def generate_noise_texture
-        noise = Array(Float32).new(16 * 3) do
-          rand(-1.0f32..1.0f32)
-        end
+        noise = Array(Float32).new(16 * 3) { rand(-1.0f32..1.0f32) }
 
         LibGL.glGenTextures(1, pointerof(@noise_texture))
         LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @noise_texture)
@@ -73,9 +130,9 @@ module Tachyon
         end
       end
 
-      private def create_single_channel_fbo(fbo : LibGL::GLuint*, texture : LibGL::GLuint*, w : Int32, h : Int32)
-        LibGL.glGenFramebuffers(1, fbo)
-        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, fbo.value)
+      private def create_single_channel_frame_buffer(frame_buffer : LibGL::GLuint*, texture : LibGL::GLuint*, w : Int32, h : Int32)
+        LibGL.glGenFramebuffers(1, frame_buffer)
+        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame_buffer.value)
         LibGL.glGenTextures(1, texture)
         LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, texture.value)
         LibGL.glTexImage2D(LibGL::GL_TEXTURE_2D, 0, LibGL::GL_R8.to_i32, w, h, 0,
@@ -87,7 +144,7 @@ module Tachyon
       end
 
       private def cleanup
-        {pointerof(@fbo), pointerof(@blur_fbo)}.each do |f|
+        {pointerof(@frame_buffer), pointerof(@blur_frame_buffer)}.each do |f|
           LibGL.glDeleteFramebuffers(1, f) if f.value != 0
           f.value = 0_u32
         end

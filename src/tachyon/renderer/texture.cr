@@ -2,6 +2,7 @@
 @[Link(ldflags: "#{__DIR__}/../../../bin/stb_image_impl.o")]
 lib LibSTBI
   fun stbi_load(filename : LibC::Char*, x : Int32*, y : Int32*, channels_in_file : Int32*, desired_channels : Int32) : UInt8*
+  fun stbi_loadf(filename : LibC::Char*, x : Int32*, y : Int32*, channels_in_file : Int32*, desired_channels : Int32) : Float32*
   fun stbi_load_from_memory(buffer : UInt8*, len : Int32, x : Int32*, y : Int32*, channels_in_file : Int32*, desired_channels : Int32) : UInt8*
   fun stbi_image_free(data : Void*) : Void
   fun stbi_set_flip_vertically_on_load(flag : Int32) : Void

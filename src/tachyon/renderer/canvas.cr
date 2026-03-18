@@ -30,7 +30,7 @@ module Tachyon
       ]
 
       def initialize
-        @shader = Shader.new(Constants::GUI_VERTEX_SHADER, Constants::GUI_FRAGMENT_SHADER)
+        @shader = Shader.from_file("gui")
         @font = Font.new
         @default_texture = Texture.solid_color(255_u8, 255_u8, 255_u8, 255_u8)
         setup_quad
@@ -57,6 +57,12 @@ module Tachyon
 
       def remove_sprite(sprite : Sprite)
         @sprites.delete(sprite)
+      end
+
+      def tick_sprites(delta_time : Float32)
+        @sprites.each do |sprite|
+          sprite.update(delta_time) if sprite.animation_playing
+        end
       end
 
       def render(viewport_width : Int32, viewport_height : Int32)
@@ -157,12 +163,21 @@ module Tachyon
         @shader.set_vector2("uSize", w, h)
         @shader.set_color("uColor", sprite.r, sprite.g, sprite.b, sprite.a)
 
-        # Reset UVs to full quad
-        full_verts = QUAD_VERTS
+        u0, v0, u1, v1 = sprite.frame_uv
+
+        frame_verts = StaticArray[
+          0.0f32, 0.0f32, u0, v0,
+          1.0f32, 0.0f32, u1, v0,
+          1.0f32, 1.0f32, u1, v1,
+          0.0f32, 0.0f32, u0, v0,
+          1.0f32, 1.0f32, u1, v1,
+          0.0f32, 1.0f32, u0, v1,
+        ]
+
         LibGL.glBindBuffer(LibGL::GL_ARRAY_BUFFER, @quad_vbo)
         LibGL.glBufferData(LibGL::GL_ARRAY_BUFFER,
-          full_verts.size.to_i64 * sizeof(Float32),
-          full_verts.to_unsafe.as(Pointer(Void)),
+          frame_verts.size.to_i64 * sizeof(Float32),
+          frame_verts.to_unsafe.as(Pointer(Void)),
           LibGL::GL_DYNAMIC_DRAW)
 
         LibGL.glBindVertexArray(@quad_vao)

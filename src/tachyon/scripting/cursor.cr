@@ -121,7 +121,6 @@ module Tachyon
             end
           end
         end
-
       {% elsif flag?(:linux) %}
         private def warp(cx : Int32, cy : Int32) : Nil
           display = Gdk::Display.default
@@ -149,8 +148,8 @@ module Tachyon
 
                 root_window = LibX11.XDefaultRootWindow(x_display)
                 LibX11.XWarpPointer(x_display, 0_u64, root_window,
-                                    0, 0, 0_u32, 0_u32,
-                                    root_x + cx, root_y + cy)
+                  0, 0, 0_u32, 0_u32,
+                  root_x + cx, root_y + cy)
                 LibX11.XFlush(x_display)
               ensure
                 LibX11.XCloseDisplay(x_display)
@@ -200,7 +199,6 @@ module Tachyon
 
           {x, y}
         end
-
       {% else %}
         private def warp(cx : Int32, cy : Int32) : Nil
           # Unsupported platform - no-op

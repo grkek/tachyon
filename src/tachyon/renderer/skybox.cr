@@ -25,7 +25,7 @@ module Tachyon
       ]
 
       def initialize
-        @shader = Shader.new(Constants::SKYBOX_VERTEX, Constants::SKYBOX_FRAGMENT)
+        @shader = Shader.from_file("skybox")
         setup_mesh
       end
 

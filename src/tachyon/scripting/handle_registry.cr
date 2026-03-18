@@ -8,6 +8,7 @@ module Tachyon
       @lights : Hash(UInt32, Renderer::Light) = {} of UInt32 => Renderer::Light
       @sprites : Hash(UInt32, Renderer::Sprite) = {} of UInt32 => Renderer::Sprite
       @sounds : Hash(UInt32, Audio::Sound) = {} of UInt32 => Audio::Sound
+      @emitters : Hash(UInt32, Renderer::ParticleSystem::Emitter) = {} of UInt32 => Renderer::ParticleSystem::Emitter
       @next_id : UInt32 = 1_u32
 
       def store_node(node : Scene::Node) : UInt32
@@ -65,12 +66,24 @@ module Tachyon
         @sounds[id]?
       end
 
+      def store_emitter(emitter : Renderer::ParticleSystem::Emitter) : UInt32
+        id = @next_id
+        @next_id += 1
+        @emitters[id] = emitter
+        id
+      end
+
+      def get_emitter(id : UInt32) : Renderer::ParticleSystem::Emitter?
+        @emitters[id]?
+      end
+
       def release(id : UInt32)
         @nodes.delete(id)
         @cameras.delete(id)
         @lights.delete(id)
         @sprites.delete(id)
         @sounds.delete(id)
+        @emitters.delete(id)
       end
 
       def find_handle(node : Scene::Node) : UInt32
@@ -87,6 +100,7 @@ module Tachyon
         @lights.clear
         @sprites.clear
         @sounds.clear
+        @emitters.clear
       end
     end
   end

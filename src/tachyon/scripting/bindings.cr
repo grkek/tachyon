@@ -2,8 +2,9 @@ module Tachyon
   module Scripting
     alias QuickJS = Medusa::Binding::QuickJS
 
+    # Numeric slots for the C callback bridge, one per JS-callable function
     enum CallbackSlot
-      CreateCube = 0
+      CreateCube                      = 0
       CreateSphere
       CreatePlane
       CreateCylinder
@@ -11,6 +12,10 @@ module Tachyon
       SceneRemove
       SceneFind
       SceneClear
+      ScenePick
+      SceneSave
+      SceneLoadFile
+      SceneLoadEnvironment
       NodeSetPosition
       NodeGetPosition
       NodeSetRotation
@@ -71,7 +76,50 @@ module Tachyon
       AudioLoadSound
       AudioStopSound
       AudioSetVolume
-      ScenePick
+      NodeLoadTexture
+      NodeSetTextureScale
+      NodeSetMaterialEmissive
+      NodeSetMaterialEmissiveStrength
+      SpriteSetAtlas
+      SpritePlayAnimation
+      SpriteStopAnimation
+      SpriteSetFrame
+      ParticleCreateEmitter
+      ParticleDestroyEmitter
+      ParticleSetPosition
+      ParticleSetDirection
+      ParticleSetColors
+      ParticleSetSizes
+      ParticleSetSpeed
+      ParticleSetLifetime
+      ParticleSetGravity
+      ParticleSetRate
+      ParticleSetSpread
+      ParticleSetActive
+      ParticleEmitBurst
+      ParticleLoadTexture
+      ToggleFog
+      SetFogParameters
+      ToggleBloom
+      SetBloomParameters
+      ToggleSSAO
+      SetSSAOParameters
+      ToggleShadow
+      SetShadowResolution
+      ToggleSkybox
+      SetSkyboxTopColor
+      SetSkyboxBottomColor
+      ToggleVignette
+      SetVignetteParameters
+      ToggleChromaticAberration
+      SetChromaticAberrationStrength
+      ToggleColorGrading
+      SetColorGradingParameters
+      ToggleFXAA
+      SetAmbientColor
+      PipelineToggleStage
+      PipelineMoveStage
+      PipelineRemoveStage
     end
 
     @[Link(ldflags: "#{__DIR__}/../../../bin/tachyon_bridge.a")]
@@ -79,9 +127,9 @@ module Tachyon
       fun TachyonBridge_SetCallback(slot : LibC::Int, pointer : Void*, closure_data : Void*) : Void
       fun TachyonBridge_InitClasses(rt : QuickJS::JSRuntime) : Void
       fun TachyonBridge_RegisterModule(ctx : QuickJS::JSContext) : QuickJS::JSModuleDef
-      fun TachyonBridge_CallOnStart(ctx : QuickJS::JSContext, module_ns : QuickJS::JSValue) : LibC::Int
-      fun TachyonBridge_CallOnUpdate(ctx : QuickJS::JSContext, module_ns : QuickJS::JSValue, dt : Float64) : LibC::Int
-      fun TachyonBridge_CallOnFixedUpdate(ctx : QuickJS::JSContext, module_ns : QuickJS::JSValue, dt : Float64) : LibC::Int
+      fun TachyonBridge_CallOnStart(ctx : QuickJS::JSContext, module_ns : Pointer(QuickJS::JSValue)) : LibC::Int
+      fun TachyonBridge_CallOnUpdate(ctx : QuickJS::JSContext, module_ns : Pointer(QuickJS::JSValue), dt : Float64) : LibC::Int
+      fun TachyonBridge_CallOnFixedUpdate(ctx : QuickJS::JSContext, module_ns : Pointer(QuickJS::JSValue), dt : Float64) : LibC::Int
       fun TachyonBridge_GetModuleNamespace(ctx : QuickJS::JSContext, m : QuickJS::JSModuleDef) : QuickJS::JSValue
     end
   end

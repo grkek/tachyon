@@ -1,9 +1,46 @@
 module Tachyon
   module Renderer
+    # Compiles, links, and manages a GLSL shader program
     class Shader
       Log = ::Log.for(self)
 
+      # Resolve shaders relative to this source file's directory
+      SHADER_DIR = File.join({{__DIR__}}, "..", "..", "shaders")
+
       getter program : LibGL::GLuint
+
+      @uniform_cache : Hash(String, LibGL::GLint) = {} of String => LibGL::GLint
+
+      # Load a single shader source file by name (e.g. "pbr.vert")
+      def self.load_file(name : String) : String
+        path = File.join(SHADER_DIR, "#{name}.glsl")
+        unless File.exists?(path)
+          raise "Shader file not found: #{path}"
+        end
+        source = File.read(path)
+        Log.debug { "Loaded shader: #{path} (#{source.bytesize} bytes)" }
+        source
+      end
+
+      # Load a shader, returning nil instead of raising on failure
+      def self.load_file?(name : String) : String?
+        load_file(name)
+      rescue
+        nil
+      end
+
+      # Load a vertex/fragment pair by convention: "name.vert" and "name.frag"
+      def self.load_program(name : String) : {String, String}
+        vert = load_file("#{name}.vert")
+        frag = load_file("#{name}.frag")
+        {vert, frag}
+      end
+
+      # Create a shader program from a named pair on disk
+      def self.from_file(name : String) : Shader
+        vert, frag = load_program(name)
+        new(vert, frag)
+      end
 
       def initialize(vertex_source : String, fragment_source : String)
         vert = compile(LibGL::GL_VERTEX_SHADER, vertex_source)
@@ -28,40 +65,41 @@ module Tachyon
         LibGL.glDeleteShader(frag)
       end
 
+      # Activate this shader program
       def use
         LibGL.glUseProgram(@program)
       end
 
+      # Cached uniform location lookup
+      def location(name : String) : LibGL::GLint
+        @uniform_cache[name] ||= LibGL.glGetUniformLocation(@program, name.to_unsafe)
+      end
+
       def set_matrix4(name : String, matrix : Math::Matrix4)
-        loc = LibGL.glGetUniformLocation(@program, name.to_unsafe)
-        LibGL.glUniformMatrix4fv(loc, 1, LibGL::GL_FALSE, matrix.to_unsafe)
+        LibGL.glUniformMatrix4fv(location(name), 1, LibGL::GL_FALSE, matrix.to_unsafe)
       end
 
       def set_vector3(name : String, vec : Math::Vector3)
-        loc = LibGL.glGetUniformLocation(@program, name.to_unsafe)
-        LibGL.glUniform3f(loc, vec.x, vec.y, vec.z)
+        LibGL.glUniform3f(location(name), vec.x, vec.y, vec.z)
       end
 
       def set_vector2(name : String, x : Float32, y : Float32)
-        loc = LibGL.glGetUniformLocation(@program, name.to_unsafe)
-        LibGL.glUniform2f(loc, x, y)
+        LibGL.glUniform2f(location(name), x, y)
       end
 
       def set_color(name : String, r : Float32, g : Float32, b : Float32, a : Float32)
-        loc = LibGL.glGetUniformLocation(@program, name.to_unsafe)
-        LibGL.glUniform4f(loc, r, g, b, a)
+        LibGL.glUniform4f(location(name), r, g, b, a)
       end
 
       def set_float(name : String, value : Float32)
-        loc = LibGL.glGetUniformLocation(@program, name.to_unsafe)
-        LibGL.glUniform1f(loc, value)
+        LibGL.glUniform1f(location(name), value)
       end
 
       def set_int(name : String, value : Int32)
-        loc = LibGL.glGetUniformLocation(@program, name.to_unsafe)
-        LibGL.glUniform1i(loc, value)
+        LibGL.glUniform1i(location(name), value)
       end
 
+      # Release the GL program
       def destroy
         LibGL.glDeleteProgram(@program)
       end

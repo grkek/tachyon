@@ -19,7 +19,7 @@ module Tachyon
       ]
 
       def initialize
-        @shader = Shader.new(Constants::GUI_VERTEX_SHADER, Constants::GUI_FRAGMENT_SHADER)
+        @shader = Shader.from_file("gui")
         @font = Font.new
         setup_quad
       end
