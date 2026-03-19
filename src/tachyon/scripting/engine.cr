@@ -6,7 +6,7 @@ module Tachyon
 
       alias QuickJS = Medusa::Binding::QuickJS
 
-      getter registry : HandleRegistry
+      getter registry : Registry
       getter input_state : InputState
       getter commands : Array(GUI::DrawCall) = [] of GUI::DrawCall
 
@@ -24,7 +24,7 @@ module Tachyon
       @has_module_namespace : Bool = false
 
       def initialize(@scene : Scene::Graph, @camera : Renderer::Camera, @light_manager : Renderer::LightManager)
-        @registry = HandleRegistry.new
+        @registry = Registry.new
         @input_state = InputState.new
       end
 
@@ -273,14 +273,15 @@ module Tachyon
         })
 
         set_callback(CallbackSlot::SceneLoadEnvironment, ->(path : LibC::Char*) {
-          if vp = engine.viewport
-            ibl = Renderer::IBL.new
-            if pp = vp.post_process
-              ibl.load_hdr(String.new(path), pp.quad_vao)
+          ibl = Renderer::IBL.new
+          ibl.load_hdr(String.new(path))
+
+          if ibl.ready?
+            if vp = engine.viewport
+              vp.pipeline.context.ibl = ibl
             end
-          else
-            Log.warn { "SceneLoadEnvironment: viewport is nil" }
           end
+
           0_u32
         })
       end
@@ -690,7 +691,10 @@ module Tachyon
 
       # Audio playback callbacks
       private def register_audio_callbacks(registry, audio_engine)
+        Log.info { "register_audio_callbacks: audio_engine=#{audio_engine.nil? ? "nil" : "present"}" }
+
         set_callback(CallbackSlot::AudioPlaySound, ->(path : LibC::Char*) {
+          Log.info { "AudioPlaySound: #{String.new(path)}, engine=#{audio_engine.nil? ? "nil" : "present"}" }
           audio_engine.try(&.play(String.new(path)))
           0_u32
         })
@@ -712,6 +716,46 @@ module Tachyon
         set_callback(CallbackSlot::AudioSetVolume, ->(h : UInt32, vol : Float32) {
           sound = registry.get_sound(h)
           sound.try { |s| s.volume = vol } if sound
+        })
+
+        set_callback(CallbackSlot::AudioSetLooping, ->(h : UInt32, looping : Int32) {
+          sound = registry.get_sound(h)
+          sound.try { |s| s.looping = looping != 0 } if sound
+        })
+
+        set_callback(CallbackSlot::AudioSetSpatial, ->(h : UInt32, enabled : Int32) {
+          sound = registry.get_sound(h)
+          sound.try { |s| s.spatial = enabled != 0 } if sound
+        })
+
+        set_callback(CallbackSlot::AudioSetSoundPosition, ->(h : UInt32, x : Float32, y : Float32, z : Float32) {
+          sound = registry.get_sound(h)
+          sound.try { |s| s.position = Math::Vector3.new(x, y, z) } if sound
+        })
+
+        set_callback(CallbackSlot::AudioSetMinDistance, ->(h : UInt32, distance : Float32) {
+          sound = registry.get_sound(h)
+          sound.try { |s| s.min_distance = distance } if sound
+        })
+
+        set_callback(CallbackSlot::AudioSetMaxDistance, ->(h : UInt32, distance : Float32) {
+          sound = registry.get_sound(h)
+          sound.try { |s| s.max_distance = distance } if sound
+        })
+
+        set_callback(CallbackSlot::AudioSetRolloff, ->(h : UInt32, rolloff : Float32) {
+          sound = registry.get_sound(h)
+          sound.try { |s| s.rolloff = rolloff } if sound
+        })
+
+        set_callback(CallbackSlot::AudioSetPitch, ->(h : UInt32, pitch : Float32) {
+          sound = registry.get_sound(h)
+          sound.try { |s| s.pitch = pitch } if sound
+        })
+
+        set_callback(CallbackSlot::AudioStartSound, ->(h : UInt32) {
+          sound = registry.get_sound(h)
+          sound.try(&.play) if sound
         })
       end
 
@@ -819,6 +863,11 @@ module Tachyon
           else
             Log.warn { "No emitter found for handle #{h}" }
           end
+        })
+
+        set_callback(CallbackSlot::ParticleSetBlendAdditive, ->(h : UInt32, additive : Int32) {
+          emitter = registry.get_emitter(h)
+          emitter.blend_additive = additive != 0 if emitter
         })
       end
 

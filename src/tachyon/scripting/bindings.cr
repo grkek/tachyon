@@ -76,6 +76,14 @@ module Tachyon
       AudioLoadSound
       AudioStopSound
       AudioSetVolume
+      AudioSetLooping
+      AudioSetSpatial
+      AudioSetSoundPosition
+      AudioSetMinDistance
+      AudioSetMaxDistance
+      AudioSetRolloff
+      AudioSetPitch
+      AudioStartSound
       NodeLoadTexture
       NodeSetTextureScale
       NodeSetMaterialEmissive
@@ -96,6 +104,7 @@ module Tachyon
       ParticleSetRate
       ParticleSetSpread
       ParticleSetActive
+      ParticleSetBlendAdditive
       ParticleEmitBurst
       ParticleLoadTexture
       ToggleFog

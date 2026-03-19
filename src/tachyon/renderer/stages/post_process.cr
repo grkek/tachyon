@@ -17,16 +17,11 @@ module Tachyon
         end
 
         def call(context : Context, frame : Frame) : Frame
-          if post_process = @post_process
-            post_process.apply(frame.buffer.to_i32, frame.width, frame.height)
-          end
+          post_process = @post_process
+          return frame unless post_process
 
+          post_process.apply(frame)
           frame
-        end
-
-        # Expose for stages that need the quad VAO (e.g. SSAO)
-        def post_process : Renderer::PostProcess?
-          @post_process
         end
 
         def teardown

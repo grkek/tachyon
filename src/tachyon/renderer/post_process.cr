@@ -4,8 +4,6 @@ module Tachyon
     class PostProcess
       Log = ::Log.for(self)
 
-      @copy_frame_buffer : LibGL::GLuint = 0_u32
-      @copy_texture : LibGL::GLuint = 0_u32
       @bright_frame_buffer : LibGL::GLuint = 0_u32
       @bright_texture : LibGL::GLuint = 0_u32
       @ping_frame_buffer : LibGL::GLuint = 0_u32
@@ -43,8 +41,6 @@ module Tachyon
         @width = width
         @height = height
 
-        create_color_frame_buffer(pointerof(@copy_frame_buffer), pointerof(@copy_texture), width, height)
-
         hw = width // 2
         hh = height // 2
         create_color_frame_buffer(pointerof(@bright_frame_buffer), pointerof(@bright_texture), hw, hh)
@@ -52,16 +48,17 @@ module Tachyon
         create_color_frame_buffer(pointerof(@pong_frame_buffer), pointerof(@pong_texture), hw, hh)
       end
 
-      # Run bloom + FXAA after the scene has been rendered into the given FBO
-      def apply(frame_buffer : Int32, width : Int32, height : Int32)
+      def apply(frame : Rendering::Frame)
+        width = frame.width
+        height = frame.height
         ensure_initialized(width, height)
 
         bloom = Configuration.instance.bloom
         fxaa = Configuration.instance.fxaa
 
-        # Clear all work textures to prevent ghosting
-        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @copy_frame_buffer)
-        LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
+        LibGL.glDisable(LibGL::GL_DEPTH_TEST)
+
+        # Clear bloom work textures
         LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @bright_frame_buffer)
         LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
         LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @ping_frame_buffer)
@@ -69,33 +66,21 @@ module Tachyon
         LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @pong_frame_buffer)
         LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
 
-        # Always copy the scene
-        LibGL.glBindFramebuffer(LibGL::GL_READ_FRAMEBUFFER, frame_buffer.to_u32)
-        LibGL.glBindFramebuffer(LibGL::GL_DRAW_FRAMEBUFFER, @copy_frame_buffer)
-        LibGL.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
-          LibGL::GL_COLOR_BUFFER_BIT, LibGL::GL_LINEAR)
-
         if bloom.enabled
           hw = width // 2
           hh = height // 2
 
-          LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @ping_frame_buffer)
-          LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
-          LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @pong_frame_buffer)
-          LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
           LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @bright_frame_buffer)
           LibGL.glViewport(0, 0, hw, hh)
-          LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
           @bright_shader.use
           LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
-          LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @copy_texture)
+          LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, frame.color_texture)
           @bright_shader.set_int("uScene", 0)
           @bright_shader.set_float("uThreshold", bloom.threshold)
           draw_quad
 
           horizontal = true
           first = true
-
           10.times do
             LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, horizontal ? @ping_frame_buffer : @pong_frame_buffer)
             LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
@@ -111,35 +96,34 @@ module Tachyon
           end
         end
 
-        # Always composite
-        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame_buffer.to_u32)
+        # Composite
+        frame.swap!
+        LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame.buffer)
         LibGL.glViewport(0, 0, width, height)
         @composite_shader.use
         LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
-        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @copy_texture)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, frame.alt_texture)
         @composite_shader.set_int("uScene", 0)
         LibGL.glActiveTexture(LibGL::GL_TEXTURE1)
-        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, bloom.enabled ? @ping_texture : @copy_texture)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, bloom.enabled ? @ping_texture : frame.alt_texture)
         @composite_shader.set_int("uBloom", 1)
         @composite_shader.set_float("uBloomIntensity", bloom.enabled ? bloom.intensity : 0.0f32)
-
         draw_quad
 
+        # FXAA
         if fxaa.enabled
-          LibGL.glBindFramebuffer(LibGL::GL_READ_FRAMEBUFFER, frame_buffer.to_u32)
-          LibGL.glBindFramebuffer(LibGL::GL_DRAW_FRAMEBUFFER, @copy_frame_buffer)
-          LibGL.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
-            LibGL::GL_COLOR_BUFFER_BIT, LibGL::GL_LINEAR)
-
-          LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame_buffer.to_u32)
+          frame.swap!
+          LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame.buffer)
           LibGL.glViewport(0, 0, width, height)
           @fxaa_shader.use
           LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
-          LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @copy_texture)
+          LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, frame.alt_texture)
           @fxaa_shader.set_int("uScene", 0)
           @fxaa_shader.set_vector2("uInverseScreenSize", 1.0f32 / width.to_f32, 1.0f32 / height.to_f32)
           draw_quad
         end
+
+        LibGL.glEnable(LibGL::GL_DEPTH_TEST)
       end
 
       def destroy
@@ -196,11 +180,11 @@ module Tachyon
       end
 
       private def cleanup_frame_buffers
-        {pointerof(@copy_frame_buffer), pointerof(@bright_frame_buffer), pointerof(@ping_frame_buffer), pointerof(@pong_frame_buffer)}.each do |frame_buffer|
+        {pointerof(@bright_frame_buffer), pointerof(@ping_frame_buffer), pointerof(@pong_frame_buffer)}.each do |frame_buffer|
           LibGL.glDeleteFramebuffers(1, frame_buffer) if frame_buffer.value != 0
           frame_buffer.value = 0_u32
         end
-        {pointerof(@copy_texture), pointerof(@bright_texture), pointerof(@ping_texture), pointerof(@pong_texture)}.each do |tex|
+        {pointerof(@bright_texture), pointerof(@ping_texture), pointerof(@pong_texture)}.each do |tex|
           LibGL.glDeleteTextures(1, tex) if tex.value != 0
           tex.value = 0_u32
         end

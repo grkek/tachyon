@@ -55,7 +55,7 @@ module Tachyon
         @ready
       end
 
-      def load_hdr(path : String, quad_vao : LibGL::GLuint)
+      def load_hdr(path : String)
         Log.info { "Loading HDR environment: #{path}" }
 
         gtk_frame_buffer = 0_i32
@@ -96,7 +96,7 @@ module Tachyon
         convert_to_cubemap(hdr_texture, capture_projection)
         generate_irradiance(capture_projection)
         generate_prefilter(capture_projection)
-        generate_brdf_lut(quad_vao)
+        generate_brdf_lut
 
         LibGL.glEnable(LibGL::GL_DEPTH_TEST)
 
@@ -313,8 +313,25 @@ module Tachyon
         Log.debug { "Prefilter map generated: #{@prefilter_map}" }
       end
 
-      private def generate_brdf_lut(quad_vao : LibGL::GLuint)
+      private def generate_brdf_lut
         lut_size = 512
+
+        # Temporary quad VAO for the single BRDF integration draw
+        quad_vao = 0_u32
+        quad_vbo = 0_u32
+        LibGL.glGenVertexArrays(1, pointerof(quad_vao))
+        LibGL.glBindVertexArray(quad_vao)
+        LibGL.glGenBuffers(1, pointerof(quad_vbo))
+        LibGL.glBindBuffer(LibGL::GL_ARRAY_BUFFER, quad_vbo)
+        LibGL.glBufferData(LibGL::GL_ARRAY_BUFFER,
+          Constants::QUAD_VERTICES.size.to_i64 * sizeof(Float32),
+          Constants::QUAD_VERTICES.to_unsafe.as(Pointer(Void)),
+          LibGL::GL_STATIC_DRAW)
+        LibGL.glEnableVertexAttribArray(0)
+        LibGL.glVertexAttribPointer(0, 2, LibGL::GL_FLOAT, LibGL::GL_FALSE, 4 * sizeof(Float32), Pointer(Void).null)
+        LibGL.glEnableVertexAttribArray(1)
+        LibGL.glVertexAttribPointer(1, 2, LibGL::GL_FLOAT, LibGL::GL_FALSE, 4 * sizeof(Float32), Pointer(Void).new(2_u64 * sizeof(Float32)))
+        LibGL.glBindVertexArray(0)
 
         LibGL.glGenTextures(1, pointerof(@brdf_lut))
         LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @brdf_lut)
@@ -337,6 +354,10 @@ module Tachyon
         LibGL.glBindVertexArray(quad_vao)
         LibGL.glDrawArrays(LibGL::GL_TRIANGLES, 0, 6)
         LibGL.glBindVertexArray(0)
+
+        # Clean up temporary quad
+        LibGL.glDeleteVertexArrays(1, pointerof(quad_vao))
+        LibGL.glDeleteBuffers(1, pointerof(quad_vbo))
 
         Log.debug { "BRDF LUT generated: #{@brdf_lut}" }
       end

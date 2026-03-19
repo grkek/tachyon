@@ -5,7 +5,7 @@
  * Registers the "tachyon" synthetic ES module with native classes.
  *
  * Architecture:
- *   - Crystal owns all engine objects via a HandleRegistry
+ *   - Crystal owns all engine objects via a Registry
  *   - JS objects hold an opaque uint32 handle
  *   - Crystal callbacks are stored as CrystalProcedure (same pattern as Medusa)
  *     which preserves closure data across the FFI boundary
@@ -121,6 +121,14 @@ enum CallbackSlot
     CB_AUDIO_LOAD_SOUND,
     CB_AUDIO_STOP_SOUND,
     CB_AUDIO_SET_VOLUME,
+    CB_AUDIO_SET_LOOPING,
+    CB_AUDIO_SET_SPATIAL,
+    CB_AUDIO_SET_SOUND_POSITION,
+    CB_AUDIO_SET_MIN_DISTANCE,
+    CB_AUDIO_SET_MAX_DISTANCE,
+    CB_AUDIO_SET_ROLLOFF,
+    CB_AUDIO_SET_PITCH,
+    CB_AUDIO_START_SOUND,
     CB_NODE_LOAD_TEXTURE,
     CB_NODE_SET_TEXTURE_SCALE,
     CB_NODE_SET_MATERIAL_EMISSIVE,
@@ -141,6 +149,7 @@ enum CallbackSlot
     CB_PARTICLE_SET_RATE,
     CB_PARTICLE_SET_SPREAD,
     CB_PARTICLE_SET_ACTIVE,
+    CB_PARTICLE_SET_BLEND_ADDITIVE,
     CB_PARTICLE_EMIT_BURST,
     CB_PARTICLE_LOAD_TEXTURE,
     CB_TOGGLE_FOG,
@@ -178,11 +187,15 @@ static CrystalProc g_callbacks[CB_MAX] = {};
 static void call_8f_void(CallbackSlot slot, float a, float b, float c, float d, float e, float f, float g, float h)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, float, float, float, float, float, float, float, float);
         ((Fn)cb.pointer)(cb.closure_data, a, b, c, d, e, f, g, h);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(float, float, float, float, float, float, float, float);
         ((Fn)cb.pointer)(a, b, c, d, e, f, g, h);
     }
@@ -192,11 +205,15 @@ static void call_8f_void(CallbackSlot slot, float a, float b, float c, float d, 
 static void call_s7f_void(CallbackSlot slot, const char *s, float a, float b, float c, float d, float e, float f, float g)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, const char *, float, float, float, float, float, float, float);
         ((Fn)cb.pointer)(cb.closure_data, s, a, b, c, d, e, f, g);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(const char *, float, float, float, float, float, float, float);
         ((Fn)cb.pointer)(s, a, b, c, d, e, f, g);
     }
@@ -206,11 +223,15 @@ static void call_s7f_void(CallbackSlot slot, const char *s, float a, float b, fl
 static uint32_t call_fff_u32(CallbackSlot slot, float a, float b, float c)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef uint32_t (*Fn)(void *, float, float, float);
         return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
-    } else {
+    }
+    else
+    {
         typedef uint32_t (*Fn)(float, float, float);
         return ((Fn)cb.pointer)(a, b, c);
     }
@@ -220,11 +241,15 @@ static uint32_t call_fff_u32(CallbackSlot slot, float a, float b, float c)
 static uint32_t call_fii_u32(CallbackSlot slot, float a, int b, int c)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef uint32_t (*Fn)(void *, float, int, int);
         return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
-    } else {
+    }
+    else
+    {
         typedef uint32_t (*Fn)(float, int, int);
         return ((Fn)cb.pointer)(a, b, c);
     }
@@ -234,11 +259,15 @@ static uint32_t call_fii_u32(CallbackSlot slot, float a, int b, int c)
 static uint32_t call_ff_u32(CallbackSlot slot, float a, float b)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef uint32_t (*Fn)(void *, float, float);
         return ((Fn)cb.pointer)(cb.closure_data, a, b);
-    } else {
+    }
+    else
+    {
         typedef uint32_t (*Fn)(float, float);
         return ((Fn)cb.pointer)(a, b);
     }
@@ -248,11 +277,15 @@ static uint32_t call_ff_u32(CallbackSlot slot, float a, float b)
 static uint32_t call_ffi_u32(CallbackSlot slot, float a, float b, int c)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef uint32_t (*Fn)(void *, float, float, int);
         return ((Fn)cb.pointer)(cb.closure_data, a, b, c);
-    } else {
+    }
+    else
+    {
         typedef uint32_t (*Fn)(float, float, int);
         return ((Fn)cb.pointer)(a, b, c);
     }
@@ -262,11 +295,15 @@ static uint32_t call_ffi_u32(CallbackSlot slot, float a, float b, int c)
 static void call_u32_void(CallbackSlot slot, uint32_t h)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, uint32_t);
         ((Fn)cb.pointer)(cb.closure_data, h);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(uint32_t);
         ((Fn)cb.pointer)(h);
     }
@@ -276,11 +313,15 @@ static void call_u32_void(CallbackSlot slot, uint32_t h)
 static uint32_t call_s_u32(CallbackSlot slot, const char *s)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef uint32_t (*Fn)(void *, const char *);
         return ((Fn)cb.pointer)(cb.closure_data, s);
-    } else {
+    }
+    else
+    {
         typedef uint32_t (*Fn)(const char *);
         return ((Fn)cb.pointer)(s);
     }
@@ -290,11 +331,15 @@ static uint32_t call_s_u32(CallbackSlot slot, const char *s)
 static void call_void(CallbackSlot slot)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *);
         ((Fn)cb.pointer)(cb.closure_data);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)();
         ((Fn)cb.pointer)();
     }
@@ -304,11 +349,15 @@ static void call_void(CallbackSlot slot)
 static void call_u32_fff_void(CallbackSlot slot, uint32_t h, float x, float y, float z)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, uint32_t, float, float, float);
         ((Fn)cb.pointer)(cb.closure_data, h, x, y, z);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(uint32_t, float, float, float);
         ((Fn)cb.pointer)(h, x, y, z);
     }
@@ -318,11 +367,15 @@ static void call_u32_fff_void(CallbackSlot slot, uint32_t h, float x, float y, f
 static void call_u32_ppp_void(CallbackSlot slot, uint32_t h, float *x, float *y, float *z)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, uint32_t, float *, float *, float *);
         ((Fn)cb.pointer)(cb.closure_data, h, x, y, z);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(uint32_t, float *, float *, float *);
         ((Fn)cb.pointer)(h, x, y, z);
     }
@@ -332,11 +385,15 @@ static void call_u32_ppp_void(CallbackSlot slot, uint32_t h, float *x, float *y,
 static void call_u32_s_void(CallbackSlot slot, uint32_t h, const char *s)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, uint32_t, const char *);
         ((Fn)cb.pointer)(cb.closure_data, h, s);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(uint32_t, const char *);
         ((Fn)cb.pointer)(h, s);
     }
@@ -346,11 +403,15 @@ static void call_u32_s_void(CallbackSlot slot, uint32_t h, const char *s)
 static void call_u32_i_void(CallbackSlot slot, uint32_t h, int v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, uint32_t, int);
         ((Fn)cb.pointer)(cb.closure_data, h, v);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(uint32_t, int);
         ((Fn)cb.pointer)(h, v);
     }
@@ -360,11 +421,15 @@ static void call_u32_i_void(CallbackSlot slot, uint32_t h, int v)
 static int call_u32_int(CallbackSlot slot, uint32_t h)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef int (*Fn)(void *, uint32_t);
         return ((Fn)cb.pointer)(cb.closure_data, h);
-    } else {
+    }
+    else
+    {
         typedef int (*Fn)(uint32_t);
         return ((Fn)cb.pointer)(h);
     }
@@ -374,11 +439,15 @@ static int call_u32_int(CallbackSlot slot, uint32_t h)
 static void call_u32_f_void(CallbackSlot slot, uint32_t h, float v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, uint32_t, float);
         ((Fn)cb.pointer)(cb.closure_data, h, v);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(uint32_t, float);
         ((Fn)cb.pointer)(h, v);
     }
@@ -388,11 +457,15 @@ static void call_u32_f_void(CallbackSlot slot, uint32_t h, float v)
 static uint32_t call_u32(CallbackSlot slot)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef uint32_t (*Fn)(void *);
         return ((Fn)cb.pointer)(cb.closure_data);
-    } else {
+    }
+    else
+    {
         typedef uint32_t (*Fn)();
         return ((Fn)cb.pointer)();
     }
@@ -402,11 +475,15 @@ static uint32_t call_u32(CallbackSlot slot)
 static int call_s_int(CallbackSlot slot, const char *s)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef int (*Fn)(void *, const char *);
         return ((Fn)cb.pointer)(cb.closure_data, s);
-    } else {
+    }
+    else
+    {
         typedef int (*Fn)(const char *);
         return ((Fn)cb.pointer)(s);
     }
@@ -416,11 +493,15 @@ static int call_s_int(CallbackSlot slot, const char *s)
 static int call_i_int(CallbackSlot slot, int v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return 0;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return 0;
+    if (cb.isClosure())
+    {
         typedef int (*Fn)(void *, int);
         return ((Fn)cb.pointer)(cb.closure_data, v);
-    } else {
+    }
+    else
+    {
         typedef int (*Fn)(int);
         return ((Fn)cb.pointer)(v);
     }
@@ -430,11 +511,15 @@ static int call_i_int(CallbackSlot slot, int v)
 static void call_pp_void(CallbackSlot slot, float *a, float *b)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, float *, float *);
         ((Fn)cb.pointer)(cb.closure_data, a, b);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(float *, float *);
         ((Fn)cb.pointer)(a, b);
     }
@@ -444,11 +529,15 @@ static void call_pp_void(CallbackSlot slot, float *a, float *b)
 static void call_u32_s_i_void(CallbackSlot slot, uint32_t h, const char *s, int i)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, uint32_t, const char *, int);
         ((Fn)cb.pointer)(cb.closure_data, h, s, i);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(uint32_t, const char *, int);
         ((Fn)cb.pointer)(h, s, i);
     }
@@ -458,11 +547,15 @@ static void call_u32_s_i_void(CallbackSlot slot, uint32_t h, const char *s, int 
 static void call_i32_void(CallbackSlot slot, int v)
 {
     auto &cb = g_callbacks[slot];
-    if (!cb.isValid()) return;
-    if (cb.isClosure()) {
+    if (!cb.isValid())
+        return;
+    if (cb.isClosure())
+    {
         typedef void (*Fn)(void *, int);
         ((Fn)cb.pointer)(cb.closure_data, v);
-    } else {
+    }
+    else
+    {
         typedef void (*Fn)(int);
         ((Fn)cb.pointer)(v);
     }
@@ -1736,6 +1829,116 @@ static JSValue js_audio_set_volume(JSContext *ctx, JSValueConst this_val, int ar
     return JS_UNDEFINED;
 }
 
+// Audio.setLooping(handle, enabled)
+static JSValue js_audio_set_looping(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    int looping = 0;
+    JS_ToInt32(ctx, &looping, argv[1]);
+    if (h)
+        call_u32_i_void(CB_AUDIO_SET_LOOPING, h, looping);
+    return JS_UNDEFINED;
+}
+
+// Audio.setSpatial(handle, enabled)
+static JSValue js_audio_set_spatial(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    int enabled = 0;
+    JS_ToInt32(ctx, &enabled, argv[1]);
+    if (h)
+        call_u32_i_void(CB_AUDIO_SET_SPATIAL, h, enabled);
+    return JS_UNDEFINED;
+}
+
+// Audio.setPosition(handle, vec3)
+static JSValue js_audio_set_sound_position(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    double x = 0, y = 0, z = 0;
+    JSValue vx = JS_GetPropertyStr(ctx, argv[1], "x");
+    JSValue vy = JS_GetPropertyStr(ctx, argv[1], "y");
+    JSValue vz = JS_GetPropertyStr(ctx, argv[1], "z");
+    JS_ToFloat64(ctx, &x, vx);
+    JS_ToFloat64(ctx, &y, vy);
+    JS_ToFloat64(ctx, &z, vz);
+    JS_FreeValue(ctx, vx);
+    JS_FreeValue(ctx, vy);
+    JS_FreeValue(ctx, vz);
+    if (h)
+        call_u32_fff_void(CB_AUDIO_SET_SOUND_POSITION, h, (float)x, (float)y, (float)z);
+    return JS_UNDEFINED;
+}
+
+// Audio.setMinDistance(handle, distance)
+static JSValue js_audio_set_min_distance(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    double dist = 1.0;
+    JS_ToFloat64(ctx, &dist, argv[1]);
+    if (h)
+        call_u32_f_void(CB_AUDIO_SET_MIN_DISTANCE, h, (float)dist);
+    return JS_UNDEFINED;
+}
+
+// Audio.setMaxDistance(handle, distance)
+static JSValue js_audio_set_max_distance(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    double dist = 100.0;
+    JS_ToFloat64(ctx, &dist, argv[1]);
+    if (h)
+        call_u32_f_void(CB_AUDIO_SET_MAX_DISTANCE, h, (float)dist);
+    return JS_UNDEFINED;
+}
+
+// Audio.setRolloff(handle, rolloff)
+static JSValue js_audio_set_rolloff(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    double rolloff = 1.0;
+    JS_ToFloat64(ctx, &rolloff, argv[1]);
+    if (h)
+        call_u32_f_void(CB_AUDIO_SET_ROLLOFF, h, (float)rolloff);
+    return JS_UNDEFINED;
+}
+
+// Audio.setPitch(handle, pitch)
+static JSValue js_audio_set_pitch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    double pitch = 1.0;
+    JS_ToFloat64(ctx, &pitch, argv[1]);
+    if (h)
+        call_u32_f_void(CB_AUDIO_SET_PITCH, h, (float)pitch);
+    return JS_UNDEFINED;
+}
+
+// Audio.start(handle)
+static JSValue js_audio_start(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    if (h)
+        call_u32_void(CB_AUDIO_START_SOUND, h);
+    return JS_UNDEFINED;
+}
+
 // Particles.createEmitter({ maxParticles })
 static JSValue js_particle_create_emitter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -1886,6 +2089,18 @@ static JSValue js_particle_set_active(JSContext *ctx, JSValueConst this_val, int
     uint32_t h;
     JS_ToUint32(ctx, &h, argv[0]);
     call_u32_i_void(CB_PARTICLE_SET_ACTIVE, h, JS_ToBool(ctx, argv[1]));
+    return JS_UNDEFINED;
+}
+
+static JSValue js_particle_set_blend_additive(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 2)
+        return JS_UNDEFINED;
+    uint32_t h = get_handle(ctx, argv[0], js_tachyon_node_class_id);
+    int additive = 0;
+    JS_ToInt32(ctx, &additive, argv[1]);
+    if (h)
+        call_u32_i_void(CB_PARTICLE_SET_BLEND_ADDITIVE, h, additive);
     return JS_UNDEFINED;
 }
 
@@ -2346,6 +2561,14 @@ static int js_tachyon_module_init(JSContext *ctx, JSModuleDef *m)
     JS_SetPropertyStr(ctx, audio_obj, "load", JS_NewCFunction(ctx, js_audio_load, "load", 1));
     JS_SetPropertyStr(ctx, audio_obj, "stop", JS_NewCFunction(ctx, js_audio_stop, "stop", 1));
     JS_SetPropertyStr(ctx, audio_obj, "setVolume", JS_NewCFunction(ctx, js_audio_set_volume, "setVolume", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "setLooping", JS_NewCFunction(ctx, js_audio_set_looping, "setLooping", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "setSpatial", JS_NewCFunction(ctx, js_audio_set_spatial, "setSpatial", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "setPosition", JS_NewCFunction(ctx, js_audio_set_sound_position, "setPosition", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "setMinDistance", JS_NewCFunction(ctx, js_audio_set_min_distance, "setMinDistance", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "setMaxDistance", JS_NewCFunction(ctx, js_audio_set_max_distance, "setMaxDistance", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "setRolloff", JS_NewCFunction(ctx, js_audio_set_rolloff, "setRolloff", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "setPitch", JS_NewCFunction(ctx, js_audio_set_pitch, "setPitch", 2));
+    JS_SetPropertyStr(ctx, audio_obj, "start", JS_NewCFunction(ctx, js_audio_start, "start", 1));
     JS_SetModuleExport(ctx, m, "Audio", audio_obj);
 
     // Particles
@@ -2362,6 +2585,7 @@ static int js_tachyon_module_init(JSContext *ctx, JSModuleDef *m)
     JS_SetPropertyStr(ctx, particles_obj, "setRate", JS_NewCFunction(ctx, js_particle_set_rate, "setRate", 2));
     JS_SetPropertyStr(ctx, particles_obj, "setSpread", JS_NewCFunction(ctx, js_particle_set_spread, "setSpread", 2));
     JS_SetPropertyStr(ctx, particles_obj, "setActive", JS_NewCFunction(ctx, js_particle_set_active, "setActive", 2));
+    JS_SetPropertyStr(ctx, particles_obj, "setBlendAdditive", JS_NewCFunction(ctx, js_particle_set_blend_additive, "setBlendAdditive", 2));
     JS_SetPropertyStr(ctx, particles_obj, "emitBurst", JS_NewCFunction(ctx, js_particle_emit_burst, "emitBurst", 2));
     JS_SetPropertyStr(ctx, particles_obj, "loadTexture", JS_NewCFunction(ctx, js_particle_load_texture, "loadTexture", 2));
     JS_SetModuleExport(ctx, m, "Particles", particles_obj);

@@ -28,11 +28,13 @@ lib LibGL
   GL_COMPILE_STATUS  = 0x8B81_u32
   GL_LINK_STATUS     = 0x8B82_u32
   GL_INFO_LOG_LENGTH = 0x8B84_u32
+  GL_CLAMP_TO_BORDER = 0x812D_u32
 
   # Buffer targets
   GL_ARRAY_BUFFER         = 0x8892_u32
   GL_ELEMENT_ARRAY_BUFFER = 0x8893_u32
   GL_RENDERBUFFER         = 0x8D41_u32
+  GL_UNIFORM_BUFFER = 0x8A11_u32
 
   # Usage hints
   GL_STATIC_DRAW  = 0x88E4_u32
@@ -56,6 +58,7 @@ lib LibGL
   # Blend functions
   GL_SRC_ALPHA           = 0x0302_u32
   GL_ONE_MINUS_SRC_ALPHA = 0x0303_u32
+  GL_ONE = 1_u32
 
   fun glBlendFunc(sfactor : GLenum, dfactor : GLenum) : Void
 
@@ -126,6 +129,10 @@ lib LibGL
   fun glRenderbufferStorage(target : UInt32, internalformat : UInt32, width : Int32, height : Int32) : Void
   fun glFramebufferRenderbuffer(target : UInt32, attachment : UInt32, renderbuffertarget : UInt32, renderbuffer : UInt32) : Void
   fun glDeleteRenderbuffers(n : Int32, renderbuffers : UInt32*) : Void
+  fun glBindBufferBase(target : GLenum, index : GLuint, buffer : GLuint) : Void
+  fun glBufferSubData(target : GLenum, offset : GLsizeiptr, size : GLsizeiptr, data : Void*) : Void
+  fun glGetUniformBlockIndex(program : GLuint, uniformBlockName : GLchar*) : GLuint
+  fun glUniformBlockBinding(program : GLuint, uniformBlockIndex : GLuint, uniformBlockBinding : GLuint) : Void
 
   # Vertex attributes
   fun glEnableVertexAttribArray(index : GLuint) : Void
@@ -189,6 +196,7 @@ lib LibGL
 
   GL_TEXTURE_COMPARE_MODE   = 0x884C_u32
   GL_TEXTURE_COMPARE_FUNC   = 0x884D_u32
+  GL_TEXTURE_BORDER_COLOR = 0x1004_u32
   GL_COMPARE_REF_TO_TEXTURE = 0x884E_u32
 
   fun glGenTextures(n : GLsizei, textures : GLuint*) : Void
@@ -197,6 +205,7 @@ lib LibGL
   fun glTexImage2D(target : GLenum, level : GLint, internalformat : GLint, width : GLsizei, height : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : Void*) : Void
   fun glTexParameteri(target : GLenum, pname : GLenum, param : GLint) : Void
   fun glTexParameterf(target : GLenum, pname : GLenum, param : GLfloat) : Void
+  fun glTexParameterfv(target : GLenum, pname : GLenum, params : Float32*) : Void
   fun glGenerateMipmap(target : GLenum) : Void
   fun glActiveTexture(texture : GLenum) : Void
 

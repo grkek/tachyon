@@ -46,6 +46,16 @@ module Tachyon
         result
       end
 
+      # Vector4 multiplication
+      def *(v : Vector4) : Vector4
+        Vector4.new(
+          @data[0] * v.x + @data[4] * v.y + @data[8] * v.z + @data[12] * v.w,
+          @data[1] * v.x + @data[5] * v.y + @data[9] * v.z + @data[13] * v.w,
+          @data[2] * v.x + @data[6] * v.y + @data[10] * v.z + @data[14] * v.w,
+          @data[3] * v.x + @data[7] * v.y + @data[11] * v.z + @data[15] * v.w,
+        )
+      end
+
       # Transform a Vector3 as a point (w=1)
       def transform_point(point : Vector3) : Vector3
         x = @data[0] * point.x + @data[4] * point.y + @data[8] * point.z + @data[12]

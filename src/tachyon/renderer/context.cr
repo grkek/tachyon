@@ -5,6 +5,7 @@ module Tachyon
       property scene : Scene::Graph
       property camera : Renderer::Camera
       property light_manager : Renderer::LightManager
+      property ibl : Renderer::IBL? = nil
 
       # Scripting overlay commands set before each frame
       property commands : Array(Scripting::GUI::DrawCall) = [] of Scripting::GUI::DrawCall

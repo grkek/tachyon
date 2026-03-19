@@ -1,7 +1,6 @@
 module Tachyon
   module Rendering
     module Stages
-      # Renders the skybox behind all geometry
       class Skybox < Base
         Log = ::Log.for(self)
 
@@ -23,14 +22,25 @@ module Tachyon
 
         def call(context : Context, frame : Frame) : Frame
           return frame unless Configuration.instance.skybox.enabled
-          if skybox = @skybox
-            LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame.buffer)
+          skybox = @skybox
+          return frame unless skybox
+
+          LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame.buffer)
+
+          # Use IBL environment cubemap if available, otherwise gradient
+          if ibl = context.ibl
+            if ibl.ready? && ibl.environment_map != 0
+              skybox.render_cubemap(ibl.environment_map, context.camera.view_matrix, context.camera.projection_matrix)
+            else
+              skybox.render(context.camera.view_matrix, context.camera.projection_matrix)
+            end
+          else
             skybox.render(context.camera.view_matrix, context.camera.projection_matrix)
           end
+
           frame
         end
 
-        # Swap in a new skybox at runtime
         def skybox=(value : Renderer::Skybox?)
           @skybox = value
         end

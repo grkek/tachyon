@@ -8,22 +8,28 @@ module Tachyon
         @shader : Renderer::Shader? = nil
         @default_texture : Renderer::Texture? = nil
         @dummy_cubemap : LibGL::GLuint = 0_u32
+        @uniform_buffer : Renderer::UniformBuffer? = nil
 
         def initialize
           super("geometry")
         end
 
         def setup(context : Context)
-          # Load PBR shader from disk
           @shader = Renderer::Shader.from_file("pbr")
           @default_texture = Renderer::Texture.solid_color(255_u8, 255_u8, 255_u8, 255_u8)
           create_dummy_cubemap
+
+          ubo = Renderer::UniformBuffer.new
+          ubo.bind_to_shader(@shader.not_nil!)
+          @uniform_buffer = ubo
+
           Log.info { "Geometry pass initialized (shader: #{@shader.try(&.program)})" }
         end
 
         def call(context : Context, frame : Frame) : Frame
           shader = @shader
-          return frame unless shader
+          ubo = @uniform_buffer
+          return frame unless shader && ubo
 
           LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame.buffer)
           LibGL.glViewport(0, 0, frame.width, frame.height)
@@ -31,15 +37,20 @@ module Tachyon
 
           shader.use
 
-          set_camera_uniforms(shader, context, frame)
-          set_light_uniforms(shader, context)
-          set_shadow_uniforms(shader, frame)
+          # Single UBO upload replaces camera, light, fog, and shadow uniform calls
+          ubo.update(context, frame)
+
+          # Texture bindings still use individual uniforms
+          set_shadow_textures(shader, frame)
           set_ssao_uniforms(shader, frame)
           set_ibl_uniforms(shader, context)
-          set_fog_uniforms(shader, context)
 
-          render_opaque(shader, context)
-          render_transparent(shader, context)
+          # Extract frustum from VP matrix for culling
+          vp = context.camera.projection_matrix * context.camera.view_matrix
+          frustum = Math::Frustum.new(vp)
+
+          render_opaque(shader, context, frustum)
+          render_transparent(shader, context, frustum)
 
           frame
         end
@@ -49,35 +60,27 @@ module Tachyon
           @shader = nil
           @default_texture.try(&.destroy)
           @default_texture = nil
+          @uniform_buffer.try(&.destroy)
+          @uniform_buffer = nil
           if @dummy_cubemap != 0
             LibGL.glDeleteTextures(1, pointerof(@dummy_cubemap))
             @dummy_cubemap = 0_u32
           end
         end
 
-        # Camera and projection uniforms
-        private def set_camera_uniforms(shader : Renderer::Shader, context : Context, frame : Frame)
-          shader.set_matrix4("uView", context.camera.view_matrix)
-          shader.set_matrix4("uProjection", context.camera.projection_matrix)
-          shader.set_vector3("uViewPos", context.camera.position)
-          shader.set_vector3("uAmbientColor", Configuration.instance.ambient.color)
-          shader.set_matrix4("uLightSpaceMatrix", frame.light_space_matrix)
-        end
-
-        # Forward light array to the PBR shader
-        private def set_light_uniforms(shader : Renderer::Shader, context : Context)
-          context.light_manager.apply(shader)
-        end
-
-        # Bind shadow depth texture produced by the shadow stage
-        private def set_shadow_uniforms(shader : Renderer::Shader, frame : Frame)
-          if frame.shadow_depth_texture != 0
+        # Bind cascade shadow map textures (matrices/counts are in the UBO)
+        private def set_shadow_textures(shader : Renderer::Shader, frame : Frame)
+          if frame.cascade_count > 0
+            frame.cascade_count.times do |i|
+              unit = 10 + i
+              LibGL.glActiveTexture(LibGL::GL_TEXTURE0 + unit.to_u32)
+              LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, frame.cascade_textures[i])
+              shader.set_int("uShadowMap#{i}", unit)
+            end
+          elsif frame.shadow_depth_texture != 0
             LibGL.glActiveTexture(LibGL::GL_TEXTURE5)
             LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, frame.shadow_depth_texture)
             shader.set_int("uShadowMap", 5)
-            shader.set_int("uHasShadowMap", 1)
-          else
-            shader.set_int("uHasShadowMap", 0)
           end
         end
 
@@ -95,6 +98,14 @@ module Tachyon
 
         # Bind IBL cubemaps or fall back to dummy black cubemaps
         private def set_ibl_uniforms(shader : Renderer::Shader, context : Context)
+          if ibl = context.ibl
+            if ibl.ready?
+              ibl.bind(shader, 7, 8, 9)
+              return
+            end
+          end
+
+          # Fallback: bind dummy cubemaps, no IBL
           LibGL.glActiveTexture(LibGL::GL_TEXTURE0 + 7_u32)
           LibGL.glBindTexture(LibGL::GL_TEXTURE_CUBE_MAP, @dummy_cubemap)
           LibGL.glActiveTexture(LibGL::GL_TEXTURE0 + 8_u32)
@@ -104,25 +115,9 @@ module Tachyon
           shader.set_int("uHasIBL", 0)
         end
 
-        # Set fog uniforms from engine settings
-        private def set_fog_uniforms(shader : Renderer::Shader, context : Context)
-          c = Configuration.instance
-
-          if c.fog.enabled
-            shader.set_int("uFogEnabled", 1)
-            shader.set_vector3("uFogColor", c.fog.color)
-            shader.set_float("uFogNear", c.fog.near)
-            shader.set_float("uFogFar", c.fog.far)
-            shader.set_float("uFogDensity", c.fog.density)
-            shader.set_int("uFogMode", c.fog.mode)
-          else
-            shader.set_int("uFogEnabled", 0)
-          end
-        end
-
         # Draw all opaque objects (opacity == 1.0)
-        private def render_opaque(shader : Renderer::Shader, context : Context)
-          context.scene.each_renderable do |node|
+        private def render_opaque(shader : Renderer::Shader, context : Context, frustum : Math::Frustum)
+          context.scene.each_renderable(frustum) do |node|
             mat = node.material
             next if mat && mat.opacity < 1.0f32
             render_node(shader, node, mat)
@@ -131,12 +126,12 @@ module Tachyon
         end
 
         # Draw transparent objects sorted back-to-front
-        private def render_transparent(shader : Renderer::Shader, context : Context)
+        private def render_transparent(shader : Renderer::Shader, context : Context, frustum : Math::Frustum)
           LibGL.glEnable(LibGL::GL_BLEND)
           LibGL.glBlendFunc(LibGL::GL_SRC_ALPHA, LibGL::GL_ONE_MINUS_SRC_ALPHA)
           LibGL.glDepthMask(LibGL::GL_FALSE)
 
-          context.scene.each_renderable do |node|
+          context.scene.each_renderable(frustum) do |node|
             mat = node.material
             next unless mat && mat.opacity < 1.0f32
             render_node(shader, node, mat)

@@ -102,7 +102,7 @@ module Tachyon
 
       @area.realize_signal.connect { on_realize }
       @area.unrealize_signal.connect { destroy }
-      @area.render_signal.connect { |ctx| on_render }
+      @area.render_signal.connect { |context| on_render }
       @area.add_tick_callback(->tick_callback(Gtk::Widget, Gdk::FrameClock))
     end
 
@@ -164,7 +164,12 @@ module Tachyon
       @camera.scale_factor = scale
       @camera.update_aspect(w, h) if h > 0
 
-      # Run scripting before rendering
+      # Update audio listener to match camera
+      if ae = @audio_engine
+        direction = (@camera.target - @camera.position).normalize
+        ae.update_listener(@camera.position, direction)
+      end
+
       @before_render.try(&.call(dt))
 
       # Capture GTK's framebuffer and run the pipeline

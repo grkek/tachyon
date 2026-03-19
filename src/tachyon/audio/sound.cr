@@ -46,6 +46,36 @@ module Tachyon
         LibMiniaudio.ma_sound_set_position(sound_ptr, pos.x, pos.y, pos.z)
       end
 
+      def looping=(value : Bool)
+        return unless @initialized
+        LibMiniaudio.ma_sound_set_looping(sound_ptr, value ? 1 : 0)
+      end
+
+      def spatial=(enabled : Bool)
+        return unless @initialized
+        LibMiniaudio.ma_sound_set_spatialization_enabled(sound_ptr, enabled ? 1_u32 : 0_u32)
+      end
+
+      def min_distance=(distance : Float32)
+        return unless @initialized
+        LibMiniaudio.ma_sound_set_min_distance(sound_ptr, distance)
+      end
+
+      def max_distance=(distance : Float32)
+        return unless @initialized
+        LibMiniaudio.ma_sound_set_max_distance(sound_ptr, distance)
+      end
+
+      def rolloff=(value : Float32)
+        return unless @initialized
+        LibMiniaudio.ma_sound_set_rolloff(sound_ptr, value)
+      end
+
+      def pitch=(value : Float32)
+        return unless @initialized
+        LibMiniaudio.ma_sound_set_pitch(sound_ptr, value)
+      end
+
       def destroy
         return unless @initialized
         LibMiniaudio.ma_sound_uninit(sound_ptr)

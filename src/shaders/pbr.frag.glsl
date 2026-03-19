@@ -2,21 +2,54 @@
 
 const float PI = 3.14159265359;
 const int MAX_LIGHTS = 8;
+const int MAX_CASCADES = 4;
 
-// Light types
 const int LIGHT_DIRECTIONAL = 0;
 const int LIGHT_POINT = 1;
 const int LIGHT_SPOT = 2;
 
-struct Light {
+struct LightData {
   int type;
-  vec3 color;
   float intensity;
-  vec3 position;
-  vec3 direction;
   float range;
   float innerCutoff;
+  vec3 color;       float _pad0;
+  vec3 position;    float _pad1;
+  vec3 direction;   float _pad2;
   float outerCutoff;
+  float _pad3;
+  float _pad4;
+  float _pad5;
+};
+
+layout(std140) uniform FrameData {
+  mat4 uView;
+  mat4 uProjection;
+  vec3 uViewPos;      float _fp0;
+  vec3 uAmbientColor; float _fp1;
+
+  int  uFogEnabled;
+  int  uFogMode;
+  float uFogNear;
+  float uFogFar;
+  vec3 uFogColor;     float _fp2;
+  float uFogDensity;
+  float _fp3;
+  float _fp4;
+  float _fp5;
+
+  int  uHasShadowMap;
+  int  uCascadeCount;
+  float _fp6;
+  float _fp7;
+  mat4 uCascadeMatrix[MAX_CASCADES];
+  vec4 uCascadeSplits;
+
+  int  uLightCount;
+  float _fp8;
+  float _fp9;
+  float _fp10;
+  LightData uLights[MAX_LIGHTS];
 };
 
 struct Material {
@@ -35,10 +68,6 @@ struct Material {
 };
 
 uniform Material uMaterial;
-uniform Light uLights[MAX_LIGHTS];
-uniform int uLightCount;
-uniform vec3 uViewPos;
-uniform vec3 uAmbientColor;
 
 // Texture samplers
 uniform sampler2D uAlbedoMap;
@@ -48,18 +77,19 @@ uniform sampler2D uAoMap;
 uniform sampler2D uEmissiveMap;
 uniform vec2 uTextureScale;
 
-// Shadow map
-uniform sampler2D uShadowMap;
-uniform int uHasShadowMap;
-uniform mat4 uLightSpaceMatrix;
+// Per-object transform
+uniform mat4 uModel;
+uniform mat4 uNormalMatrix;
 
-// Fog
-uniform int uFogEnabled;
-uniform vec3 uFogColor;
-uniform float uFogNear;
-uniform float uFogFar;
-uniform float uFogDensity;
-uniform int uFogMode; // 0 = linear, 1 = exponential, 2 = exponential squared
+// Cascaded Shadow Maps (bound per-frame by geometry stage)
+uniform sampler2D uShadowMap0;
+uniform sampler2D uShadowMap1;
+uniform sampler2D uShadowMap2;
+uniform sampler2D uShadowMap3;
+
+// Legacy single shadow map
+uniform sampler2D uShadowMap;
+uniform mat4 uLightSpaceMatrix;
 
 // SSAO
 uniform sampler2D uSSAOMap;
@@ -75,11 +105,10 @@ uniform float uIBLIntensity;
 in vec3 vFragPos;
 in vec3 vNormal;
 in vec2 vTexCoord;
-in vec4 vFragPosLightSpace;
+in float vViewDepth;
 
 out vec4 fragColor;
 
-// Normal Distribution Function (GGX/Trowbridge-Reitz)
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
   float a = roughness * roughness;
   float a2 = a * a;
@@ -90,7 +119,6 @@ float DistributionGGX(vec3 N, vec3 H, float roughness) {
   return a2 / max(denom, 0.0001);
 }
 
-// Geometry Function (Smith's Schlick-GGX)
 float GeometrySchlickGGX(float NdotV, float roughness) {
   float r = (roughness + 1.0);
   float k = (r * r) / 8.0;
@@ -103,56 +131,94 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
   return GeometrySchlickGGX(NdotV, roughness) * GeometrySchlickGGX(NdotL, roughness);
 }
 
-// Fresnel (Schlick approximation)
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
   return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-// Shadow calculation with PCF
-float ShadowCalculation(vec4 fragPosLightSpace) {
-  vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+float SampleShadowMap(sampler2D shadowMap, vec4 lightSpacePos) {
+  vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
   projCoords = projCoords * 0.5 + 0.5;
 
   if (projCoords.z > 1.0) return 1.0;
+  if (projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) return 1.0;
 
   float shadow = 0.0;
-  vec2 texelSize = 1.0 / textureSize(uShadowMap, 0);
+  vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
   float currentDepth = projCoords.z;
-  float bias = 0.003;
+  float bias = 0.002;
 
-  for (int x = -2; x <= 2; ++x) {
-    for (int y = -2; y <= 2; ++y) {
-      float closestDepth = texture(uShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+  for (int x = -1; x <= 1; ++x) {
+    for (int y = -1; y <= 1; ++y) {
+      float closestDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
       shadow += currentDepth - bias > closestDepth ? 0.0 : 1.0;
     }
   }
-  return shadow / 25.0;
+  return shadow / 9.0;
 }
 
-// Per-light radiance using Cook-Torrance BRDF
-vec3 CalcLight(Light light, vec3 N, vec3 V, vec3 F0, vec3 albedo, float metallic, float roughness) {
+float CascadedShadow(vec3 fragPos) {
+  if (uCascadeCount <= 0) {
+    vec4 lightSpacePos = uLightSpaceMatrix * vec4(fragPos, 1.0);
+    return SampleShadowMap(uShadowMap, lightSpacePos);
+  }
+
+  int cascade = uCascadeCount - 1;
+  for (int i = 0; i < uCascadeCount; i++) {
+    if (vViewDepth < uCascadeSplits[i]) {
+      cascade = i;
+      break;
+    }
+  }
+
+  vec4 lightSpacePos = uCascadeMatrix[cascade] * vec4(fragPos, 1.0);
+
+  float shadow = 1.0;
+  if (cascade == 0) shadow = SampleShadowMap(uShadowMap0, lightSpacePos);
+  else if (cascade == 1) shadow = SampleShadowMap(uShadowMap1, lightSpacePos);
+  else if (cascade == 2) shadow = SampleShadowMap(uShadowMap2, lightSpacePos);
+  else shadow = SampleShadowMap(uShadowMap3, lightSpacePos);
+
+  float splitDist = uCascadeSplits[cascade];
+  float prevSplit = cascade > 0 ? uCascadeSplits[cascade - 1] : 0.0;
+  float range = splitDist - prevSplit;
+  float blendRegion = range * 0.1;
+  float distToEdge = splitDist - vViewDepth;
+
+  if (distToEdge < blendRegion && cascade < uCascadeCount - 1) {
+    float blendFactor = distToEdge / blendRegion;
+    vec4 nextLightSpacePos = uCascadeMatrix[cascade + 1] * vec4(fragPos, 1.0);
+    float nextShadow = 1.0;
+    if (cascade + 1 == 1) nextShadow = SampleShadowMap(uShadowMap1, nextLightSpacePos);
+    else if (cascade + 1 == 2) nextShadow = SampleShadowMap(uShadowMap2, nextLightSpacePos);
+    else nextShadow = SampleShadowMap(uShadowMap3, nextLightSpacePos);
+    shadow = mix(nextShadow, shadow, blendFactor);
+  }
+
+  return shadow;
+}
+
+vec3 CalcLight(int index, vec3 N, vec3 V, vec3 F0, vec3 albedo, float metallic, float roughness) {
   vec3 L;
   float attenuation = 1.0;
 
-  if (light.type == LIGHT_DIRECTIONAL) {
-    L = normalize(-light.direction);
+  if (uLights[index].type == LIGHT_DIRECTIONAL) {
+    L = normalize(-uLights[index].direction);
   } else {
-    L = normalize(light.position - vFragPos);
-    float dist = length(light.position - vFragPos);
-    // Smooth attenuation with range
-    float falloff = clamp(1.0 - pow(dist / light.range, 4.0), 0.0, 1.0);
+    L = normalize(uLights[index].position - vFragPos);
+    float dist = length(uLights[index].position - vFragPos);
+    float falloff = clamp(1.0 - pow(dist / uLights[index].range, 4.0), 0.0, 1.0);
     attenuation = (falloff * falloff) / (dist * dist + 1.0);
 
-    if (light.type == LIGHT_SPOT) {
-      float theta = dot(L, normalize(-light.direction));
-      float epsilon = light.innerCutoff - light.outerCutoff;
-      float spotIntensity = clamp((theta - light.outerCutoff) / epsilon, 0.0, 1.0);
+    if (uLights[index].type == LIGHT_SPOT) {
+      float theta = dot(L, normalize(-uLights[index].direction));
+      float epsilon = uLights[index].innerCutoff - uLights[index].outerCutoff;
+      float spotIntensity = clamp((theta - uLights[index].outerCutoff) / epsilon, 0.0, 1.0);
       attenuation *= spotIntensity;
     }
   }
 
   vec3 H = normalize(V + L);
-  vec3 radiance = light.color * light.intensity * attenuation;
+  vec3 radiance = uLights[index].color * uLights[index].intensity * attenuation;
 
   float NDF = DistributionGGX(N, H, roughness);
   float G = GeometrySmith(N, V, L, roughness);
@@ -173,7 +239,6 @@ vec3 CalcLight(Light light, vec3 N, vec3 V, vec3 F0, vec3 albedo, float metallic
 void main() {
   vec2 scaledUV = vTexCoord * uTextureScale;
 
-  // Sample material properties
   vec3 albedo = uMaterial.albedo;
   if (uMaterial.hasAlbedoMap != 0) {
     albedo = texture(uAlbedoMap, scaledUV).rgb;
@@ -197,7 +262,6 @@ void main() {
     emissive = texture(uEmissiveMap, scaledUV).rgb;
   }
 
-  // Compute normal (with optional normal mapping)
   vec3 N = normalize(vNormal);
   if (uMaterial.hasNormalMap != 0) {
     vec3 tangentNormal = texture(uNormalMap, scaledUV).rgb * 2.0 - 1.0;
@@ -213,27 +277,22 @@ void main() {
 
   vec3 V = normalize(uViewPos - vFragPos);
 
-  // Fresnel reflectance at normal incidence
   vec3 F0 = vec3(0.04);
   F0 = mix(F0, albedo, metallic);
 
-  // Accumulate light contributions
   vec3 Lo = vec3(0.0);
   for (int i = 0; i < uLightCount && i < MAX_LIGHTS; i++) {
-    vec3 lightContrib = CalcLight(uLights[i], N, V, F0, albedo, metallic, roughness);
+    vec3 lightContrib = CalcLight(i, N, V, F0, albedo, metallic, roughness);
 
-    // Apply shadow only to the primary directional light
     if (i == 0 && uLights[i].type == LIGHT_DIRECTIONAL && uHasShadowMap != 0) {
-      float shadow = ShadowCalculation(vFragPosLightSpace);
+      float shadow = CascadedShadow(vFragPos);
       lightContrib *= shadow;
     }
 
     Lo += lightContrib;
   }
 
-  // Ambient lighting (IBL or flat)
   vec3 ambient;
-
   if (uHasIBL != 0) {
     vec3 F = FresnelSchlick(max(dot(N, V), 0.0), F0);
     vec3 kS = F;
@@ -250,7 +309,6 @@ void main() {
     ambient = uAmbientColor * albedo * ao;
   }
 
-  // Apply SSAO
   if (uHasSSAO != 0) {
     float ssaoFactor = texture(uSSAOMap, gl_FragCoord.xy / vec2(textureSize(uSSAOMap, 0))).r;
     ambient *= ssaoFactor;
@@ -258,7 +316,6 @@ void main() {
 
   vec3 color = ambient + Lo + emissive * uMaterial.emissiveStrength;
 
-  // Distance fog
   if (uFogEnabled != 0) {
     float fogDistance = length(uViewPos - vFragPos);
     float fogFactor = 1.0;

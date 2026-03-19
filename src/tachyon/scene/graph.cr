@@ -34,7 +34,12 @@ module Tachyon
 
       # Traverse all visible nodes that have a mesh, yielding each
       def each_renderable(&block : Node ->)
-        traverse_renderable(@root, &block)
+        traverse_renderable(@root, nil, &block)
+      end
+
+      # Traverse with frustum culling — skip nodes whose AABB is outside
+      def each_renderable(frustum : Math::Frustum, &block : Node ->)
+        traverse_renderable(@root, frustum, &block)
       end
 
       def destroy
@@ -50,10 +55,18 @@ module Tachyon
         nil
       end
 
-      private def traverse_renderable(node : Node, &block : Node ->)
+      private def traverse_renderable(node : Node, frustum : Math::Frustum?, &block : Node ->)
         return unless node.visible
-        block.call(node) if node.mesh
-        node.children.each { |child| traverse_renderable(child, &block) }
+
+        if node.mesh
+          if frustum
+            block.call(node) if frustum.intersects_aabb?(node.world_aabb)
+          else
+            block.call(node)
+          end
+        end
+
+        node.children.each { |child| traverse_renderable(child, frustum, &block) }
       end
     end
   end

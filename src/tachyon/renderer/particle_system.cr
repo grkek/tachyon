@@ -33,6 +33,7 @@ module Tachyon
         property color_end : Math::Vector3 = Math::Vector3.new(1.0f32, 0.2f32, 0.0f32)
         property alpha_start : Float32 = 1.0f32
         property alpha_end : Float32 = 0.0f32
+        property blend_additive : Bool = false
         property gravity : Math::Vector3 = Math::Vector3.new(0.0f32, -9.8f32, 0.0f32)
         property emit_rate : Float32 = 20.0f32
         property max_particles : Int32 = 256
@@ -180,6 +181,7 @@ module Tachyon
       @quad_vao : LibGL::GLuint = 0_u32
       @quad_vbo : LibGL::GLuint = 0_u32
       @instance_vbo : LibGL::GLuint = 0_u32
+      @instance_buffer : Array(Float32) = Array(Float32).new(4096 * 8, 0.0f32)
       @max_instances : Int32 = 4096
       @default_texture : Texture? = nil
       @initialized : Bool = false
@@ -230,24 +232,38 @@ module Tachyon
         shader.set_vector3("uCameraUp", camera_up(view_matrix))
         shader.set_int("uTexture", 0)
 
-        instance_data = [] of Float32
+        buffer = @instance_buffer
 
         @emitters.each do |emitter|
-          instance_data.clear
+          count = 0
 
           emitter.each_alive do |particle|
-            instance_data << particle.position.x
-            instance_data << particle.position.y
-            instance_data << particle.position.z
-            instance_data << particle.size
-            instance_data << particle.color.x
-            instance_data << particle.color.y
-            instance_data << particle.color.z
-            instance_data << particle.alpha
+            offset = count * 8
+
+            if offset + 8 > buffer.size
+              (offset + 8 - buffer.size).times { buffer << 0.0f32 }
+            end
+
+            buffer.to_unsafe[offset] = particle.position.x
+            buffer.to_unsafe[offset + 1] = particle.position.y
+            buffer.to_unsafe[offset + 2] = particle.position.z
+            buffer.to_unsafe[offset + 3] = particle.size
+            buffer.to_unsafe[offset + 4] = particle.color.x
+            buffer.to_unsafe[offset + 5] = particle.color.y
+            buffer.to_unsafe[offset + 6] = particle.color.z
+            buffer.to_unsafe[offset + 7] = particle.alpha
+
+            count += 1
           end
 
-          next if instance_data.empty?
-          instance_count = instance_data.size // 8
+          next if count == 0
+
+          # Switch blend mode per emitter
+          if emitter.blend_additive
+            LibGL.glBlendFunc(LibGL::GL_SRC_ALPHA, LibGL::GL_ONE)
+          else
+            LibGL.glBlendFunc(LibGL::GL_SRC_ALPHA, LibGL::GL_ONE_MINUS_SRC_ALPHA)
+          end
 
           if texture = emitter.texture
             texture.bind(0)
@@ -255,14 +271,14 @@ module Tachyon
             default_texture.bind(0)
           end
 
+          upload_size = count.to_i64 * 8 * sizeof(Float32)
           LibGL.glBindBuffer(LibGL::GL_ARRAY_BUFFER, @instance_vbo)
-          upload_size = instance_data.size.to_i64 * sizeof(Float32)
           LibGL.glBufferData(LibGL::GL_ARRAY_BUFFER, upload_size,
-            instance_data.to_unsafe.as(Pointer(Void)),
+            buffer.to_unsafe.as(Pointer(Void)),
             LibGL::GL_STREAM_DRAW)
 
           LibGL.glBindVertexArray(@quad_vao)
-          LibGL.glDrawArraysInstanced(LibGL::GL_TRIANGLES, 0, 6, instance_count)
+          LibGL.glDrawArraysInstanced(LibGL::GL_TRIANGLES, 0, 6, count)
         end
 
         LibGL.glBindVertexArray(0)

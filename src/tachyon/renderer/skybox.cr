@@ -125,6 +125,23 @@ module Tachyon
         LibGL.glDepthFunc(LibGL::GL_LESS)
       end
 
+      # Render with an external cubemap (e.g. from IBL environment map)
+      def render_cubemap(cubemap : LibGL::GLuint, view : Math::Matrix4, projection : Math::Matrix4)
+        LibGL.glDepthFunc(LibGL::GL_LEQUAL)
+        @shader.use
+        @shader.set_matrix4("uView", view)
+        @shader.set_matrix4("uProjection", projection)
+
+        LibGL.glBindVertexArray(@vao)
+        LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_CUBE_MAP, cubemap)
+        @shader.set_int("uSkybox", 0)
+        LibGL.glDrawArrays(LibGL::GL_TRIANGLES, 0, 36)
+        LibGL.glBindVertexArray(0)
+
+        LibGL.glDepthFunc(LibGL::GL_LESS)
+      end
+
       def destroy
         @shader.destroy
         LibGL.glDeleteVertexArrays(1, pointerof(@vao))

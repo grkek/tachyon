@@ -3,7 +3,7 @@ module Tachyon
     class Engine
       Log = ::Log.for(self)
 
-      MA_ENGINE_SIZE = 4096 # Generous allocation for ma_engine struct
+      MA_ENGINE_SIZE = 4096
 
       @engine_data : Bytes
       @initialized : Bool = false
@@ -22,6 +22,14 @@ module Tachyon
       def play(path : String)
         return unless @initialized
         LibMiniaudio.ma_engine_play_sound(to_unsafe, path.to_unsafe, Pointer(Void).null)
+      end
+
+      # Update listener position and orientation from camera
+      def update_listener(position : Math::Vector3, direction : Math::Vector3, up : Math::Vector3 = Math::Vector3.up)
+        return unless @initialized
+        LibMiniaudio.ma_engine_listener_set_position(to_unsafe, 0_u32, position.x, position.y, position.z)
+        LibMiniaudio.ma_engine_listener_set_direction(to_unsafe, 0_u32, direction.x, direction.y, direction.z)
+        LibMiniaudio.ma_engine_listener_set_world_up(to_unsafe, 0_u32, up.x, up.y, up.z)
       end
 
       def destroy
