@@ -3,9 +3,12 @@ module Tachyon
     class Transform
       Log = ::Log.for(self)
 
-      property position : Math::Vector3
-      property rotation : Math::Quaternion
-      property scale : Math::Vector3
+      @position : Math::Vector3
+      @rotation : Math::Quaternion
+      @scale : Math::Vector3
+      @dirty : Bool = true
+      @cached_model : Math::Matrix4 = Math::Matrix4.identity
+      @cached_normal : Math::Matrix4 = Math::Matrix4.identity
 
       def initialize(
         @position : Math::Vector3 = Math::Vector3.zero,
@@ -14,21 +17,68 @@ module Tachyon
       )
       end
 
+      def position : Math::Vector3
+        @position
+      end
+
+      def position=(value : Math::Vector3)
+        @position = value
+        mark_dirty
+      end
+
+      def rotation : Math::Quaternion
+        @rotation
+      end
+
+      def rotation=(value : Math::Quaternion)
+        @rotation = value
+        mark_dirty
+      end
+
+      def scale : Math::Vector3
+        @scale
+      end
+
+      def scale=(value : Math::Vector3)
+        @scale = value
+        mark_dirty
+      end
+
+      def dirty? : Bool
+        @dirty
+      end
+
+      def clear_dirty
+        @dirty = false
+      end
+
+      def mark_dirty
+        @dirty = true
+      end
+
       def model_matrix : Math::Matrix4
-        t = Math::Matrix4.translation(@position)
-        r = @rotation.to_matrix4
-        s = Math::Matrix4.scale(@scale)
-        t * r * s
+        if @dirty
+          t = Math::Matrix4.translation(@position)
+          r = @rotation.to_matrix4
+          s = Math::Matrix4.scale(@scale)
+          @cached_model = t * r * s
+          @cached_normal = @rotation.to_matrix4
+          @dirty = false
+        end
+        @cached_model
       end
 
       # Normal matrix: transpose of inverse of upper-left 3x3 of model matrix.
       # For uniform scale, this simplifies to just the rotation matrix.
       def normal_matrix : Math::Matrix4
-        @rotation.to_matrix4
+        # Ensure cache is fresh
+        model_matrix if @dirty
+        @cached_normal
       end
 
       def translate(x : Float32, y : Float32, z : Float32)
         @position = @position + Math::Vector3.new(x, y, z)
+        mark_dirty
       end
 
       def rotate(x_deg : Float32, y_deg : Float32, z_deg : Float32)
@@ -38,6 +88,7 @@ module Tachyon
           Math.to_radians(z_deg)
         )
         @rotation = @rotation * euler
+        mark_dirty
       end
 
       def look_at(target : Math::Vector3)
@@ -58,6 +109,7 @@ module Tachyon
           angle = ::Math.acos(dot.clamp(-1.0f32, 1.0f32)).to_f32
           @rotation = Math::Quaternion.from_axis_angle(axis, angle)
         end
+        mark_dirty
       end
     end
   end

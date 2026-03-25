@@ -64,7 +64,13 @@ module Tachyon
             shader.use
             shader.set_matrix4("uLightSpaceMatrix", light_matrix)
 
-            context.scene.each_renderable do |node|
+            # Build a culling frustum from the light matrix, but disable the
+            # near plane so shadow casters behind the camera are not clipped.
+            # The near plane (index 4) is pushed far back to catch any caster
+            # whose shadow could reach into the cascade's receiving area.
+            shadow_frustum = build_shadow_frustum(light_matrix)
+
+            context.scene.each_renderable(shadow_frustum) do |node|
               shader.set_matrix4("uModel", node.world_matrix)
               node.mesh.try(&.draw)
             end
@@ -102,6 +108,21 @@ module Tachyon
           end
         end
 
+        # Build a frustum that keeps the light's left/right/top/bottom planes
+        # for lateral culling, but effectively disables the near plane so that
+        # objects behind the camera (which may cast shadows into the view) are
+        # not erroneously culled. The far plane is kept as-is.
+        private def build_shadow_frustum(light_matrix : Math::Matrix4) : Math::Frustum
+          frustum = Math::Frustum.new(light_matrix)
+
+          # Plane 4 is the near plane. Push it extremely far back so it never
+          # rejects anything. We negate the normal and set a huge distance.
+          # A plane (0,0,0,1) is satisfied by every point: 0*x+0*y+0*z+1 >= 0.
+          planes = frustum.planes
+          planes[4] = Math::Vector4.new(0.0f32, 0.0f32, 0.0f32, 1.0f32)
+          Math::Frustum.new(planes)
+        end
+
         private def compute_cascade_matrix(camera : Renderer::Camera, light : Renderer::Light, cascade_near : Float32, cascade_far : Float32) : Math::Matrix4
           # Build a projection matrix for just this cascade's slice
           aspect = camera.viewport_width.to_f32 / camera.viewport_height.to_f32
@@ -127,10 +148,14 @@ module Tachyon
           radius = (radius * 16.0f32).ceil / 16.0f32
 
           # Build light view/projection
+          # Push the light camera back by a large multiple of the radius so
+          # that shadow casters far behind the cascade slice (relative to the
+          # light direction) are not clipped by the ortho near/far planes.
           light_dir = light.direction.normalize
-          light_pos = center - light_dir * radius
+          depth_extent = radius * 4.0f32
+          light_pos = center - light_dir * depth_extent
           light_view = Math::Matrix4.look_at(light_pos, center, Math::Vector3.new(0.0f32, 1.0f32, 0.0f32))
-          light_proj = Math::Matrix4.orthographic(-radius, radius, -radius, radius, 0.01f32, radius * 2.0f32)
+          light_proj = Math::Matrix4.orthographic(-radius, radius, -radius, radius, 0.01f32, depth_extent * 2.0f32)
 
           # Snap to texel grid to prevent shadow shimmer when camera moves
           shadow_matrix = light_proj * light_view
@@ -146,7 +171,7 @@ module Tachyon
           light_proj = Math::Matrix4.orthographic(
             -radius + round_x, radius + round_x,
             -radius + round_y, radius + round_y,
-            0.01f32, radius * 2.0f32
+            0.01f32, depth_extent * 2.0f32
           )
 
           light_proj * light_view

@@ -81,7 +81,7 @@ module Tachyon
 
           horizontal = true
           first = true
-          10.times do
+          6.times do
             LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, horizontal ? @ping_frame_buffer : @pong_frame_buffer)
             LibGL.glClear(LibGL::GL_COLOR_BUFFER_BIT)
             @blur_shader.use

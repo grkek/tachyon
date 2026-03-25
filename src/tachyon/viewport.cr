@@ -136,11 +136,12 @@ module Tachyon
     end
 
     # Assemble the default 3D rendering pipeline with all stages
+    # NOTE: SSAO must come AFTER geometry (it reads the depth buffer)
     private def build_default_pipeline
       @pipeline.add(Rendering::Stages::Canvas.new)
       @pipeline.add(Rendering::Stages::Shadow.new)
-      @pipeline.add(Rendering::Stages::SSAO.new)
       @pipeline.add(Rendering::Stages::Geometry.new)
+      @pipeline.add(Rendering::Stages::SSAO.new)
       @pipeline.add(Rendering::Stages::Skybox.new)
       @pipeline.add(Rendering::Stages::Particles.new)
       @pipeline.add(Rendering::Stages::PostProcess.new)
@@ -171,6 +172,9 @@ module Tachyon
       end
 
       @before_render.try(&.call(dt))
+
+      # Refresh world-space caches top-down (one walk, before any rendering)
+      @scene.root.update_world_cache
 
       # Capture GTK's framebuffer and run the pipeline
       frame_buffer = 0_u32

@@ -41,6 +41,10 @@ module Tachyon
         ).normalized_plane
       end
 
+      # Construct from pre-built planes (used for modified culling volumes)
+      def initialize(@planes : StaticArray(Vector4, 6))
+      end
+
       # Test if an AABB is at least partially inside the frustum
       def intersects_aabb?(aabb : AABB) : Bool
         @planes.each do |plane|
