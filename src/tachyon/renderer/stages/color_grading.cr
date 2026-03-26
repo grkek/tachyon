@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Applies exposure, contrast, saturation, and color tint adjustments
       class ColorGrading < Base

@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     # Long-lived shared state available to all pipeline stages
     class Context
       property scene : Scene::Graph

@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Abstract base class for a pipeline stage
       abstract class Base

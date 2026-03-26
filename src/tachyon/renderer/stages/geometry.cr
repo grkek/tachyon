@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # PBR geometry pass - renders opaque then transparent objects
       class Geometry < Base

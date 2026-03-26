@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Darkens the edges of the screen for a cinematic look
       class Vignette < Base

@@ -93,6 +93,19 @@ enum CallbackSlot
     CB_NODE_SET_WIREFRAME,
     CB_GUI_DRAW_RECT,
     CB_GUI_DRAW_TEXT,
+    CB_GUI_DRAW_PANEL,
+    CB_GUI_DRAW_BUTTON,
+    CB_GUI_DRAW_CHECKBOX,
+    CB_GUI_DRAW_COMBOBOX,
+    CB_GUI_DRAW_LIST_ROW,
+    CB_GUI_DRAW_PROGRESS,
+    CB_GUI_DRAW_SLIDER,
+    CB_GUI_DRAW_DIVIDER,
+    CB_GUI_DRAW_TEXT_ENTRY,
+    CB_GUI_DRAW_RICH_TEXT,
+    CB_GUI_DRAW_BEVEL_RAISED,
+    CB_GUI_DRAW_BEVEL_SUNKEN,
+    CB_GUI_LOAD_FONT,
     CB_GUI_CLEAR,
     CB_CANVAS_SETUP,
     CB_CANVAS_BACKGROUND,
@@ -1426,6 +1439,177 @@ static JSValue js_gui_draw_text(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_UNDEFINED;
 }
 
+// Extended GUI draw callback: sends geometry + 3 colors + state + value + text + font_id.
+// Crystal side constructs a DrawCall from these fields.
+//
+// Signature for compound commands (panel, button, checkbox, combobox, etc.):
+//   void fn(float x, float y, float w, float h,
+//           float r1, float g1, float b1, float a1,
+//           float r2, float g2, float b2, float a2,
+//           float r3, float g3, float b3, float a3,
+//           int state, float value,
+//           const char* text, int font_id)
+//
+// We pack this into two callback invocations since callback helpers max at 8 floats:
+//   Call 1 (geometry + primary color): 8 floats via call_8f_void
+//   Call 2 (secondary + tertiary color + state/value + text): via a custom call
+ 
+// Helper for the compound GUI commands.
+// This pushes a DrawCall with all fields into Crystal's command buffer.
+struct GUICompoundArgs {
+    float x, y, w, h;
+    float r1, g1, b1, a1;
+    float r2, g2, b2, a2;
+    float r3, g3, b3, a3;
+    int state;
+    float value;
+    const char* text;
+    int font_id;
+};
+ 
+static void call_gui_compound(CallbackSlot slot, const GUICompoundArgs& args) {
+    auto &cb = g_callbacks[slot];
+    if (!cb.isValid()) return;
+ 
+    // The Crystal callback signature for compound GUI commands:
+    // fn(x, y, w, h, r1, g1, b1, a1, r2, g2, b2, a2, r3, g3, b3, a3, state, value, text, font_id)
+    // Since our callback system is typed, we use a dedicated closure signature.
+    if (cb.isClosure()) {
+        typedef void (*Fn)(void*,
+            float, float, float, float,
+            float, float, float, float,
+            float, float, float, float,
+            float, float, float, float,
+            int, float, const char*, int);
+        ((Fn)cb.pointer)(cb.closure_data,
+            args.x, args.y, args.w, args.h,
+            args.r1, args.g1, args.b1, args.a1,
+            args.r2, args.g2, args.b2, args.a2,
+            args.r3, args.g3, args.b3, args.a3,
+            args.state, args.value, args.text, args.font_id);
+    }
+}
+ 
+// JS argument parser for compound GUI commands.
+// Reads: (x, y, w, h, {r,g,b,a}, {r2,g2,b2,a2}, {r3,g3,b3,a3}, state, value, text, font_id)
+// Colors default to theme values. State/value/text/font_id are optional.
+static GUICompoundArgs parse_gui_args(JSContext *ctx, int argc, JSValueConst *argv) {
+    GUICompoundArgs args = {};
+    args.a1 = 1.0f; args.a2 = 1.0f; args.a3 = 1.0f;
+    args.text = "";
+    args.font_id = 0;
+ 
+    if (argc >= 1) JS_ToFloat64(ctx, (double*)&args.x, argv[0]);
+    if (argc >= 2) JS_ToFloat64(ctx, (double*)&args.y, argv[1]);
+    if (argc >= 3) JS_ToFloat64(ctx, (double*)&args.w, argv[2]);
+    if (argc >= 4) JS_ToFloat64(ctx, (double*)&args.h, argv[3]);
+ 
+    // Primary color (r,g,b,a)
+    if (argc >= 5) { double v; JS_ToFloat64(ctx, &v, argv[4]); args.r1 = (float)v; }
+    if (argc >= 6) { double v; JS_ToFloat64(ctx, &v, argv[5]); args.g1 = (float)v; }
+    if (argc >= 7) { double v; JS_ToFloat64(ctx, &v, argv[6]); args.b1 = (float)v; }
+    if (argc >= 8) { double v; JS_ToFloat64(ctx, &v, argv[7]); args.a1 = (float)v; }
+ 
+    // Secondary color
+    if (argc >= 9)  { double v; JS_ToFloat64(ctx, &v, argv[8]);  args.r2 = (float)v; }
+    if (argc >= 10) { double v; JS_ToFloat64(ctx, &v, argv[9]);  args.g2 = (float)v; }
+    if (argc >= 11) { double v; JS_ToFloat64(ctx, &v, argv[10]); args.b2 = (float)v; }
+    if (argc >= 12) { double v; JS_ToFloat64(ctx, &v, argv[11]); args.a2 = (float)v; }
+ 
+    // Tertiary color
+    if (argc >= 13) { double v; JS_ToFloat64(ctx, &v, argv[12]); args.r3 = (float)v; }
+    if (argc >= 14) { double v; JS_ToFloat64(ctx, &v, argv[13]); args.g3 = (float)v; }
+    if (argc >= 15) { double v; JS_ToFloat64(ctx, &v, argv[14]); args.b3 = (float)v; }
+    if (argc >= 16) { double v; JS_ToFloat64(ctx, &v, argv[15]); args.a3 = (float)v; }
+ 
+    // State (int)
+    if (argc >= 17) { int32_t v; JS_ToInt32(ctx, &v, argv[16]); args.state = v; }
+ 
+    // Value (float)
+    if (argc >= 18) { double v; JS_ToFloat64(ctx, &v, argv[17]); args.value = (float)v; }
+ 
+    // Text (string)
+    if (argc >= 19) {
+        args.text = JS_ToCString(ctx, argv[18]);
+        if (!args.text) args.text = "";
+    }
+ 
+    // Font ID (int)
+    if (argc >= 20) { int32_t v; JS_ToInt32(ctx, &v, argv[19]); args.font_id = v; }
+ 
+    return args;
+}
+ 
+static void free_gui_args_text(JSContext *ctx, const GUICompoundArgs& args, int argc) {
+    if (argc >= 19 && args.text && args.text[0] != '\0') {
+        JS_FreeCString(ctx, args.text);
+    }
+}
+ 
+#define DEFINE_GUI_COMPOUND_FN(name, slot) \
+static JSValue js_gui_##name(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) { \
+    GUICompoundArgs args = parse_gui_args(ctx, argc, argv); \
+    call_gui_compound(slot, args); \
+    free_gui_args_text(ctx, args, argc); \
+    return JS_UNDEFINED; \
+}
+ 
+DEFINE_GUI_COMPOUND_FN(panel,       CB_GUI_DRAW_PANEL)
+DEFINE_GUI_COMPOUND_FN(button,      CB_GUI_DRAW_BUTTON)
+DEFINE_GUI_COMPOUND_FN(checkbox,    CB_GUI_DRAW_CHECKBOX)
+DEFINE_GUI_COMPOUND_FN(combobox,    CB_GUI_DRAW_COMBOBOX)
+DEFINE_GUI_COMPOUND_FN(list_row,    CB_GUI_DRAW_LIST_ROW)
+DEFINE_GUI_COMPOUND_FN(progress,    CB_GUI_DRAW_PROGRESS)
+DEFINE_GUI_COMPOUND_FN(slider,      CB_GUI_DRAW_SLIDER)
+DEFINE_GUI_COMPOUND_FN(divider,     CB_GUI_DRAW_DIVIDER)
+DEFINE_GUI_COMPOUND_FN(text_entry,  CB_GUI_DRAW_TEXT_ENTRY)
+DEFINE_GUI_COMPOUND_FN(rich_text,   CB_GUI_DRAW_RICH_TEXT)
+ 
+// Bevel commands only need x,y,w,h
+static JSValue js_gui_bevel_raised(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    double x=0, y=0, w=0, h=0;
+    if (argc >= 1) JS_ToFloat64(ctx, &x, argv[0]);
+    if (argc >= 2) JS_ToFloat64(ctx, &y, argv[1]);
+    if (argc >= 3) JS_ToFloat64(ctx, &w, argv[2]);
+    if (argc >= 4) JS_ToFloat64(ctx, &h, argv[3]);
+    call_8f_void(CB_GUI_DRAW_BEVEL_RAISED, (float)x, (float)y, (float)w, (float)h, 0,0,0,0);
+    return JS_UNDEFINED;
+}
+ 
+static JSValue js_gui_bevel_sunken(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    double x=0, y=0, w=0, h=0;
+    if (argc >= 1) JS_ToFloat64(ctx, &x, argv[0]);
+    if (argc >= 2) JS_ToFloat64(ctx, &y, argv[1]);
+    if (argc >= 3) JS_ToFloat64(ctx, &w, argv[2]);
+    if (argc >= 4) JS_ToFloat64(ctx, &h, argv[3]);
+    call_8f_void(CB_GUI_DRAW_BEVEL_SUNKEN, (float)x, (float)y, (float)w, (float)h, 0,0,0,0);
+    return JS_UNDEFINED;
+}
+ 
+// Font loading: GUI.loadFont(path, size) -> font_id
+static JSValue js_gui_load_font(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "GUI.loadFont(path, size?)");
+    const char *path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_EXCEPTION;
+ 
+    double size = 16.0;
+    if (argc >= 2) JS_ToFloat64(ctx, &size, argv[1]);
+ 
+    // Call Crystal's font loading callback
+    // Signature: uint32 fn(const char* path, float size) -> font_id
+    auto &cb = g_callbacks[CB_GUI_LOAD_FONT];
+    int font_id = 0;
+    if (cb.isValid()) {
+        if (cb.isClosure()) {
+            typedef int (*Fn)(void*, const char*, float);
+            font_id = ((Fn)cb.pointer)(cb.closure_data, path, (float)size);
+        }
+    }
+ 
+    JS_FreeCString(ctx, path);
+    return JS_NewInt32(ctx, font_id);
+}
+
 // GUI.clear()
 static JSValue js_gui_clear(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -2520,6 +2704,19 @@ static int js_tachyon_module_init(JSContext *ctx, JSModuleDef *m)
     JSValue gui_obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, gui_obj, "rect", JS_NewCFunction(ctx, js_gui_draw_rect, "rect", 8));
     JS_SetPropertyStr(ctx, gui_obj, "text", JS_NewCFunction(ctx, js_gui_draw_text, "text", 8));
+    JS_SetPropertyStr(ctx, gui_obj, "panel",       JS_NewCFunction(ctx, js_gui_panel,       "panel", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "button",      JS_NewCFunction(ctx, js_gui_button,      "button", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "checkbox",    JS_NewCFunction(ctx, js_gui_checkbox,    "checkbox", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "combobox",    JS_NewCFunction(ctx, js_gui_combobox,    "combobox", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "listRow",     JS_NewCFunction(ctx, js_gui_list_row,    "listRow", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "progress",    JS_NewCFunction(ctx, js_gui_progress,    "progress", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "slider",      JS_NewCFunction(ctx, js_gui_slider,      "slider", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "divider",     JS_NewCFunction(ctx, js_gui_divider,     "divider", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "textEntry",   JS_NewCFunction(ctx, js_gui_text_entry,  "textEntry", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "richText",    JS_NewCFunction(ctx, js_gui_rich_text,   "richText", 20));
+    JS_SetPropertyStr(ctx, gui_obj, "bevelRaised", JS_NewCFunction(ctx, js_gui_bevel_raised,"bevelRaised", 4));
+    JS_SetPropertyStr(ctx, gui_obj, "bevelSunken", JS_NewCFunction(ctx, js_gui_bevel_sunken,"bevelSunken", 4));
+    JS_SetPropertyStr(ctx, gui_obj, "loadFont",    JS_NewCFunction(ctx, js_gui_load_font,   "loadFont", 2));
     JS_SetPropertyStr(ctx, gui_obj, "clear", JS_NewCFunction(ctx, js_gui_clear, "clear", 0));
     JS_SetModuleExport(ctx, m, "GUI", gui_obj);
 

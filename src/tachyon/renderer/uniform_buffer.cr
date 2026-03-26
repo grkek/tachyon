@@ -99,7 +99,7 @@ module Tachyon
       end
 
       # Pack all per-frame data and upload once
-      def update(context : Rendering::Context, frame : Rendering::Frame)
+      def update(context : Renderer::Context, frame : Renderer::Frame)
         camera = context.camera
         config = Configuration.instance
 

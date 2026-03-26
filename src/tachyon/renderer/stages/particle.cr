@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Updates and renders all active particle emitters
       class Particles < Base

@@ -62,7 +62,7 @@ out float vViewDepth;
 void main() {
   vec4 worldPos = uModel * vec4(aPosition, 1.0);
   vFragPos = worldPos.xyz;
-  vNormal = mat3(uNormalMatrix) * aNormal;
+  vNormal = normalize(mat3(uNormalMatrix) * aNormal);
   vTexCoord = aTexCoord;
 
   vec4 viewPos = uView * worldPos;

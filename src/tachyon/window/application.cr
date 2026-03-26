@@ -22,7 +22,7 @@ module Tachyon
       end
 
       # Expose the pipeline for runtime stage manipulation from outside
-      def pipeline : Rendering::Pipeline?
+      def pipeline : Renderer::Pipeline?
         @viewport.try(&.pipeline)
       end
 

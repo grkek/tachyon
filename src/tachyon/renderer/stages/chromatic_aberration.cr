@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Splits RGB channels at screen edges for a lens distortion effect
       class ChromaticAberration < Base

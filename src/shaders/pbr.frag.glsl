@@ -69,7 +69,6 @@ struct Material {
 
 uniform Material uMaterial;
 
-// Texture samplers
 uniform sampler2D uAlbedoMap;
 uniform sampler2D uNormalMap;
 uniform sampler2D uMetallicRoughnessMap;
@@ -77,25 +76,20 @@ uniform sampler2D uAoMap;
 uniform sampler2D uEmissiveMap;
 uniform vec2 uTextureScale;
 
-// Per-object transform
 uniform mat4 uModel;
 uniform mat4 uNormalMatrix;
 
-// Cascaded Shadow Maps (bound per-frame by geometry stage)
 uniform sampler2D uShadowMap0;
 uniform sampler2D uShadowMap1;
 uniform sampler2D uShadowMap2;
 uniform sampler2D uShadowMap3;
 
-// Legacy single shadow map
 uniform sampler2D uShadowMap;
 uniform mat4 uLightSpaceMatrix;
 
-// SSAO
 uniform sampler2D uSSAOMap;
 uniform int uHasSSAO;
 
-// IBL
 uniform samplerCube uIrradianceMap;
 uniform samplerCube uPrefilterMap;
 uniform sampler2D uBRDFLUT;
@@ -109,18 +103,20 @@ in float vViewDepth;
 
 out vec4 fragColor;
 
+// PBR BRDF
+
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
   float a = roughness * roughness;
   float a2 = a * a;
   float NdotH = max(dot(N, H), 0.0);
   float NdotH2 = NdotH * NdotH;
-  float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+  float denom = NdotH2 * (a2 - 1.0) + 1.0;
   denom = PI * denom * denom;
   return a2 / max(denom, 0.0001);
 }
 
 float GeometrySchlickGGX(float NdotV, float roughness) {
-  float r = (roughness + 1.0);
+  float r = roughness + 1.0;
   float k = (r * r) / 8.0;
   return NdotV / (NdotV * (1.0 - k) + k);
 }
@@ -135,31 +131,47 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
   return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-float SampleShadowMap(sampler2D shadowMap, vec4 lightSpacePos) {
-  vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-  projCoords = projCoords * 0.5 + 0.5;
+// Cascaded Shadow Mapping
 
-  if (projCoords.z > 1.0) return 1.0;
-  if (projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) return 1.0;
-
+float SampleShadowPCF(sampler2D shadowMap, vec3 projCoords, float bias) {
+  float currentDepth = projCoords.z;
   float shadow = 0.0;
   vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-  float currentDepth = projCoords.z;
-  float bias = 0.002;
 
+  // 3x3 PCF kernel
   for (int x = -1; x <= 1; ++x) {
     for (int y = -1; y <= 1; ++y) {
-      float closestDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-      shadow += currentDepth - bias > closestDepth ? 0.0 : 1.0;
+      float sampleDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+      shadow += (currentDepth - bias) > sampleDepth ? 0.0 : 1.0;
     }
   }
   return shadow / 9.0;
 }
 
+float SampleCascade(int cascade, vec3 fragPos) {
+  vec4 lightSpacePos = uCascadeMatrix[cascade] * vec4(fragPos, 1.0);
+  vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+  projCoords = projCoords * 0.5 + 0.5;
+
+  if (projCoords.z > 1.0) return 1.0;
+  if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
+      projCoords.y < 0.0 || projCoords.y > 1.0) return 1.0;
+
+  // No depth bias here — polygon offset in the shadow pass handles acne
+  float bias = 0.0001;
+
+  if      (cascade == 0) return SampleShadowPCF(uShadowMap0, projCoords, bias);
+  else if (cascade == 1) return SampleShadowPCF(uShadowMap1, projCoords, bias);
+  else if (cascade == 2) return SampleShadowPCF(uShadowMap2, projCoords, bias);
+  else                   return SampleShadowPCF(uShadowMap3, projCoords, bias);
+}
+
 float CascadedShadow(vec3 fragPos) {
   if (uCascadeCount <= 0) {
-    vec4 lightSpacePos = uLightSpaceMatrix * vec4(fragPos, 1.0);
-    return SampleShadowMap(uShadowMap, lightSpacePos);
+    vec4 lsp = uLightSpaceMatrix * vec4(fragPos, 1.0);
+    vec3 pc = lsp.xyz / lsp.w * 0.5 + 0.5;
+    if (pc.z > 1.0) return 1.0;
+    return SampleShadowPCF(uShadowMap, pc, 0.0);
   }
 
   int cascade = uCascadeCount - 1;
@@ -170,32 +182,31 @@ float CascadedShadow(vec3 fragPos) {
     }
   }
 
-  vec4 lightSpacePos = uCascadeMatrix[cascade] * vec4(fragPos, 1.0);
-
-  float shadow = 1.0;
-  if (cascade == 0) shadow = SampleShadowMap(uShadowMap0, lightSpacePos);
-  else if (cascade == 1) shadow = SampleShadowMap(uShadowMap1, lightSpacePos);
-  else if (cascade == 2) shadow = SampleShadowMap(uShadowMap2, lightSpacePos);
-  else shadow = SampleShadowMap(uShadowMap3, lightSpacePos);
+  float shadow = SampleCascade(cascade, fragPos);
 
   float splitDist = uCascadeSplits[cascade];
   float prevSplit = cascade > 0 ? uCascadeSplits[cascade - 1] : 0.0;
   float range = splitDist - prevSplit;
-  float blendRegion = range * 0.1;
+  float blendRegion = range * 0.15;
   float distToEdge = splitDist - vViewDepth;
 
   if (distToEdge < blendRegion && cascade < uCascadeCount - 1) {
-    float blendFactor = distToEdge / blendRegion;
-    vec4 nextLightSpacePos = uCascadeMatrix[cascade + 1] * vec4(fragPos, 1.0);
-    float nextShadow = 1.0;
-    if (cascade + 1 == 1) nextShadow = SampleShadowMap(uShadowMap1, nextLightSpacePos);
-    else if (cascade + 1 == 2) nextShadow = SampleShadowMap(uShadowMap2, nextLightSpacePos);
-    else nextShadow = SampleShadowMap(uShadowMap3, nextLightSpacePos);
-    shadow = mix(nextShadow, shadow, blendFactor);
+    float t = distToEdge / blendRegion;
+    float nextShadow = SampleCascade(cascade + 1, fragPos);
+    shadow = mix(nextShadow, shadow, t);
+  }
+
+  float maxDist = uCascadeSplits[uCascadeCount - 1];
+  float fadeStart = maxDist * 0.75;
+  if (vViewDepth > fadeStart) {
+    float fade = clamp((maxDist - vViewDepth) / (maxDist - fadeStart), 0.0, 1.0);
+    shadow = mix(1.0, shadow, fade);
   }
 
   return shadow;
 }
+
+// Lighting
 
 vec3 CalcLight(int index, vec3 N, vec3 V, vec3 F0, vec3 albedo, float metallic, float roughness) {
   vec3 L;
@@ -229,20 +240,21 @@ vec3 CalcLight(int index, vec3 N, vec3 V, vec3 F0, vec3 albedo, float metallic, 
   vec3 specular = numerator / denominator;
 
   vec3 kS = F;
-  vec3 kD = vec3(1.0) - kS;
+  vec3 kD = (1.0 - kS);
   kD *= 1.0 - metallic;
 
   float NdotL = max(dot(N, L), 0.0);
   return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
+// Main
+
 void main() {
   vec2 scaledUV = vTexCoord * uTextureScale;
 
   vec3 albedo = uMaterial.albedo;
-  if (uMaterial.hasAlbedoMap != 0) {
+  if (uMaterial.hasAlbedoMap != 0)
     albedo = texture(uAlbedoMap, scaledUV).rgb;
-  }
 
   float metallic = uMaterial.metallic;
   float roughness = uMaterial.roughness;
@@ -253,14 +265,12 @@ void main() {
   }
 
   float ao = uMaterial.ao;
-  if (uMaterial.hasAoMap != 0) {
+  if (uMaterial.hasAoMap != 0)
     ao = texture(uAoMap, scaledUV).r;
-  }
 
   vec3 emissive = uMaterial.emissive;
-  if (uMaterial.hasEmissiveMap != 0) {
+  if (uMaterial.hasEmissiveMap != 0)
     emissive = texture(uEmissiveMap, scaledUV).rgb;
-  }
 
   vec3 N = normalize(vNormal);
   if (uMaterial.hasNormalMap != 0) {
@@ -276,17 +286,14 @@ void main() {
   }
 
   vec3 V = normalize(uViewPos - vFragPos);
-
-  vec3 F0 = vec3(0.04);
-  F0 = mix(F0, albedo, metallic);
+  vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
   vec3 Lo = vec3(0.0);
   for (int i = 0; i < uLightCount && i < MAX_LIGHTS; i++) {
     vec3 lightContrib = CalcLight(i, N, V, F0, albedo, metallic, roughness);
 
     if (i == 0 && uLights[i].type == LIGHT_DIRECTIONAL && uHasShadowMap != 0) {
-      float shadow = CascadedShadow(vFragPos);
-      lightContrib *= shadow;
+      lightContrib *= CascadedShadow(vFragPos);
     }
 
     Lo += lightContrib;
@@ -303,8 +310,8 @@ void main() {
     vec3 R = reflect(-V, N);
     vec3 prefilteredColor = textureLod(uPrefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb * uIBLIntensity;
     vec2 brdf = texture(uBRDFLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
-    ambient = (kD * diffuse + specular) * ao;
+    vec3 specIBL = prefilteredColor * (F * brdf.x + brdf.y);
+    ambient = (kD * diffuse + specIBL) * ao;
   } else {
     ambient = uAmbientColor * albedo * ao;
   }
@@ -318,12 +325,12 @@ void main() {
 
   if (uFogEnabled != 0) {
     float fogDistance = length(uViewPos - vFragPos);
-    float fogFactor = 1.0;
-    if (uFogMode == 0) {
+    float fogFactor;
+    if (uFogMode == 0)
       fogFactor = clamp((uFogFar - fogDistance) / (uFogFar - uFogNear), 0.0, 1.0);
-    } else if (uFogMode == 1) {
+    else if (uFogMode == 1)
       fogFactor = exp(-uFogDensity * fogDistance);
-    } else {
+    else {
       float d = uFogDensity * fogDistance;
       fogFactor = exp(-d * d);
     }

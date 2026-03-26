@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       class Skybox < Base
         Log = ::Log.for(self)

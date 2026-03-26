@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Renders the 2D canvas when active, short-circuiting the 3D pipeline
       class Canvas < Base

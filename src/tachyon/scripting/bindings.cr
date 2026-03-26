@@ -48,6 +48,19 @@ module Tachyon
       NodeSetWireframe
       GUIDrawRect
       GUIDrawText
+      GUIDrawPanel
+      GUIDrawButton
+      GUIDrawCheckBox
+      GUIDrawComboBox
+      GUIDrawListRow
+      GUIDrawProgress
+      GUIDrawSlider
+      GUIDrawDivider
+      GUIDrawTextEntry
+      GUIDrawRichText
+      GUIDrawBevelRaised
+      GUIDrawBevelSunken
+      GUILoadFont
       GUIClear
       CanvasSetup
       CanvasBackground

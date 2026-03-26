@@ -18,12 +18,13 @@ module Tachyon
       @light_manager : Renderer::LightManager
       @canvas : Renderer::Canvas? = nil
       @audio_engine : Audio::Engine? = nil
+      @font_manager : Renderer::GraphicalUserInterface::FontManager
       @module_definition : QuickJS::JSModuleDef = Pointer(Void).null
       @context_buffer : Pointer(QuickJS::JSContext) = Pointer(QuickJS::JSContext).malloc(1)
       @module_namespace_buffer : Pointer(QuickJS::JSValue) = Pointer(QuickJS::JSValue).malloc(1)
       @has_module_namespace : Bool = false
 
-      def initialize(@scene : Scene::Graph, @camera : Renderer::Camera, @light_manager : Renderer::LightManager)
+      def initialize(@scene : Scene::Graph, @camera : Renderer::Camera, @light_manager : Renderer::LightManager, @font_manager : Renderer::GraphicalUserInterface::FontManager)
         @registry = Registry.new
         @input_state = InputState.new
       end
@@ -115,6 +116,7 @@ module Tachyon
         commands = @commands
         engine = self
         light_manager = @light_manager
+        font_manager = @font_manager
         registry = @registry
         input_state = @input_state
         scene = @scene
@@ -126,7 +128,7 @@ module Tachyon
         register_material_callbacks(registry)
         register_texture_callbacks(registry)
         register_input_callbacks(input_state, engine)
-        register_gui_callbacks(commands)
+        register_gui_callbacks(commands, canvas, font_manager)
         register_canvas_callbacks(canvas, commands)
         register_sprite_callbacks(registry, canvas)
         register_camera_callbacks(camera)
@@ -498,7 +500,7 @@ module Tachyon
       end
 
       # GUI draw call callbacks
-      private def register_gui_callbacks(commands)
+      private def register_gui_callbacks(commands, canvas, font_manager)
         set_callback(CallbackSlot::GUIDrawRect, ->(x : Float32, y : Float32, w : Float32, h : Float32, r : Float32, g : Float32, b : Float32, a : Float32) {
           call = GUI::DrawCall.new
           call.command = GUI::Command::Rect
@@ -518,6 +520,66 @@ module Tachyon
 
         set_callback(CallbackSlot::GUIClear, -> {
           commands.clear
+        })
+
+        # Bevel commands (geometry only)
+        set_callback(CallbackSlot::GUIDrawBevelRaised, ->(x : Float32, y : Float32, w : Float32, h : Float32, _a : Float32, _b : Float32, _c : Float32, _d : Float32) {
+          call = GUI::DrawCall.new
+          call.command = GUI::Command::BevelRaised
+          call.x = x; call.y = y; call.w = w; call.h = h
+          commands << call
+        })
+
+        set_callback(CallbackSlot::GUIDrawBevelSunken, ->(x : Float32, y : Float32, w : Float32, h : Float32, _a : Float32, _b : Float32, _c : Float32, _d : Float32) {
+          call = GUI::DrawCall.new
+          call.command = GUI::Command::BevelSunken
+          call.x = x; call.y = y; call.w = w; call.h = h
+          commands << call
+        })
+
+        # Compound GUI commands share a common registration pattern.
+        # Each receives: x, y, w, h, r1-a1, r2-a2, r3-a3, state, value, text, font_id
+        {% for cmd_pair in [
+          {"GUIDrawPanel", "Panel"},
+          {"GUIDrawButton", "Button"},
+          {"GUIDrawCheckBox", "CheckBox"},
+          {"GUIDrawComboBox", "ComboBox"},
+          {"GUIDrawListRow", "ListRow"},
+          {"GUIDrawProgress", "ProgressBar"},
+          {"GUIDrawSlider", "Slider"},
+          {"GUIDrawDivider", "Divider"},
+          {"GUIDrawTextEntry", "TextEntry"},
+          {"GUIDrawRichText", "RichText"},
+        ] %}
+          set_callback(CallbackSlot::{{ cmd_pair[0].id }}, ->(
+            x : Float32, y : Float32, w : Float32, h : Float32,
+            r1 : Float32, g1 : Float32, b1 : Float32, a1 : Float32,
+            r2 : Float32, g2 : Float32, b2 : Float32, a2 : Float32,
+            r3 : Float32, g3 : Float32, b3 : Float32, a3 : Float32,
+            state : Int32, value : Float32,
+            text_ptr : LibC::Char*, font_id : Int32
+          ) {
+            call = GUI::DrawCall.new
+            call.command = GUI::Command::{{ cmd_pair[1].id }}
+            call.x = x; call.y = y; call.w = w; call.h = h
+            call.r = r1; call.g = g1; call.b = b1; call.a = a1
+            call.r2 = r2; call.g2 = g2; call.b2 = b2; call.a2 = a2
+            call.r3 = r3; call.g3 = g3; call.b3 = b3; call.a3 = a3
+            call.state = state
+            call.value = value
+            call.text = text_ptr ? String.new(text_ptr) : ""
+            call.font_id = font_id
+            commands << call
+          })
+        {% end %}
+
+        # Font loading callback
+        set_callback(CallbackSlot::GUILoadFont, ->(path_ptr : LibC::Char*, size : Float32) {
+          if fm = font_manager
+            fm.load(String.new(path_ptr), size)
+          else
+            0
+          end
         })
       end
 

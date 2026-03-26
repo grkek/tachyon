@@ -48,7 +48,7 @@ module Tachyon
         create_color_frame_buffer(pointerof(@pong_frame_buffer), pointerof(@pong_texture), hw, hh)
       end
 
-      def apply(frame : Rendering::Frame)
+      def apply(frame : Renderer::Frame)
         width = frame.width
         height = frame.height
         ensure_initialized(width, height)

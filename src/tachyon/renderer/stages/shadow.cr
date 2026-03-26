@@ -1,18 +1,16 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       class Shadow < Base
         Log = ::Log.for(self)
 
-        CASCADE_AMOUNT = 4
+        CASCADE_COUNT  = 4
+        SPLIT_LAMBDA   = 0.65f32
 
-        @frame_buffers : StaticArray(LibGL::GLuint, 4) = StaticArray(LibGL::GLuint, 4).new(0_u32)
+        @frame_buffers  : StaticArray(LibGL::GLuint, 4) = StaticArray(LibGL::GLuint, 4).new(0_u32)
         @depth_textures : StaticArray(LibGL::GLuint, 4) = StaticArray(LibGL::GLuint, 4).new(0_u32)
-        @shader : Renderer::Shader? = nil
-        @resolution : Int32 = 0
-
-        # Cascade split distances (fraction of far plane)
-        CASCADE_SPLITS = StaticArray[0.05f32, 0.15f32, 0.4f32, 1.0f32]
+        @shader : Shader? = nil
+        @resolution : Int32 = 2048
 
         def initialize
           super("shadow")
@@ -20,11 +18,9 @@ module Tachyon
 
         def setup(context : Context)
           @resolution = Configuration.instance.shadow.resolution
-          CASCADE_AMOUNT.times do |i|
-            create_cascade(i)
-          end
-          @shader = Renderer::Shader.from_file("shadow_depth")
-          Log.info { "Shadow pass initialized (#{CASCADE_AMOUNT} cascades @ #{@resolution}x#{@resolution})" }
+          CASCADE_COUNT.times { |i| create_cascade_fbo(i) }
+          @shader = Shader.from_file("shadow_depth")
+          Log.info { "Shadow stage: #{CASCADE_COUNT} cascades @ #{@resolution}x#{@resolution}" }
         end
 
         def call(context : Context, frame : Frame) : Frame
@@ -32,58 +28,61 @@ module Tachyon
           return frame unless shader
           return frame unless Configuration.instance.shadow.enabled
 
-          dir = context.light_manager.directional
-          return frame unless dir
+          dir_light = context.light_manager.directional
+          return frame unless dir_light
 
           camera = context.camera
           near = camera.near_plane
           far = camera.far_plane
+          light_dir = dir_light.direction.normalize
 
-          frame.cascade_count = CASCADE_AMOUNT
+          splits = compute_splits(near, far)
 
-          CASCADE_AMOUNT.times do |i|
-            # Compute cascade near/far in view space
-            cascade_near = i == 0 ? near : near + (far - near) * CASCADE_SPLITS[i - 1]
-            cascade_far = near + (far - near) * CASCADE_SPLITS[i]
+          # CRITICAL: clear from previous frame
+          frame.cascade_count = CASCADE_COUNT
+          frame.cascade_matrices.clear
 
-            # Store the split distance in clip space for the fragment shader
+          # Shadow GL state — set once for all cascades
+          LibGL.glEnable(LibGL::GL_DEPTH_TEST)
+          LibGL.glDepthFunc(LibGL::GL_LESS)
+          LibGL.glDepthMask(1_u8)
+          LibGL.glDisable(LibGL::GL_CULL_FACE)
+          LibGL.glEnable(LibGL::GL_POLYGON_OFFSET_FILL)
+          LibGL.glPolygonOffset(1.1f32, 4.0f32)
+
+          shader.use
+
+          CASCADE_COUNT.times do |i|
+            cascade_near = i == 0 ? near : splits[i - 1]
+            cascade_far = splits[i]
+
             frame.cascade_splits[i] = cascade_far
 
-            # Compute tight light-space matrix for this cascade
-            light_matrix = compute_cascade_matrix(camera, dir, cascade_near, cascade_far)
+            light_matrix = build_cascade_matrix(camera, light_dir, cascade_near, cascade_far)
             frame.cascade_matrices << light_matrix
 
-            # Render into this cascade's shadow map
             LibGL.glViewport(0, 0, @resolution, @resolution)
             LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, @frame_buffers[i])
             LibGL.glClear(LibGL::GL_DEPTH_BUFFER_BIT)
 
-            LibGL.glEnable(LibGL::GL_POLYGON_OFFSET_FILL)
-            LibGL.glPolygonOffset(1.5f32, 3.0f32)
-
-            shader.use
             shader.set_matrix4("uLightSpaceMatrix", light_matrix)
 
-            # Build a culling frustum from the light matrix, but disable the
-            # near plane so shadow casters behind the camera are not clipped.
-            # The near plane (index 4) is pushed far back to catch any caster
-            # whose shadow could reach into the cascade's receiving area.
-            shadow_frustum = build_shadow_frustum(light_matrix)
+            cull_frustum = build_open_near_frustum(light_matrix)
 
-            context.scene.each_renderable(shadow_frustum) do |node|
+            context.scene.each_renderable(cull_frustum) do |node|
               shader.set_matrix4("uModel", node.world_matrix)
               node.mesh.try(&.draw)
             end
 
-            LibGL.glDisable(LibGL::GL_POLYGON_OFFSET_FILL)
-
             frame.cascade_textures[i] = @depth_textures[i]
           end
 
-          # Restore the incoming framebuffer
+          # Restore state
+          LibGL.glDisable(LibGL::GL_POLYGON_OFFSET_FILL)
+          LibGL.glEnable(LibGL::GL_CULL_FACE)
+          LibGL.glCullFace(LibGL::GL_BACK)
           LibGL.glBindFramebuffer(LibGL::GL_FRAMEBUFFER, frame.buffer)
 
-          # Keep backward compatibility — first cascade as the primary shadow map
           frame.light_space_matrix = frame.cascade_matrices[0]
           frame.shadow_depth_texture = @depth_textures[0]
 
@@ -93,8 +92,7 @@ module Tachyon
         def teardown
           @shader.try(&.destroy)
           @shader = nil
-
-          CASCADE_AMOUNT.times do |i|
+          CASCADE_COUNT.times do |i|
             if @frame_buffers[i] != 0
               fbo = @frame_buffers[i]
               LibGL.glDeleteFramebuffers(1, pointerof(fbo))
@@ -108,70 +106,70 @@ module Tachyon
           end
         end
 
-        # Build a frustum that keeps the light's left/right/top/bottom planes
-        # for lateral culling, but effectively disables the near plane so that
-        # objects behind the camera (which may cast shadows into the view) are
-        # not erroneously culled. The far plane is kept as-is.
-        private def build_shadow_frustum(light_matrix : Math::Matrix4) : Math::Frustum
-          frustum = Math::Frustum.new(light_matrix)
-
-          # Plane 4 is the near plane. Push it extremely far back so it never
-          # rejects anything. We negate the normal and set a huge distance.
-          # A plane (0,0,0,1) is satisfied by every point: 0*x+0*y+0*z+1 >= 0.
-          planes = frustum.planes
-          planes[4] = Math::Vector4.new(0.0f32, 0.0f32, 0.0f32, 1.0f32)
-          Math::Frustum.new(planes)
+        private def compute_splits(near : Float32, far : Float32) : StaticArray(Float32, 4)
+          splits = StaticArray(Float32, 4).new(0.0f32)
+          CASCADE_COUNT.times do |i|
+            p = (i + 1).to_f32 / CASCADE_COUNT.to_f32
+            log_split = near * (far / near) ** p
+            uni_split = near + (far - near) * p
+            splits[i] = SPLIT_LAMBDA * log_split + (1.0f32 - SPLIT_LAMBDA) * uni_split
+          end
+          splits
         end
 
-        private def compute_cascade_matrix(camera : Renderer::Camera, light : Renderer::Light, cascade_near : Float32, cascade_far : Float32) : Math::Matrix4
-          # Build a projection matrix for just this cascade's slice
+        private def build_cascade_matrix(
+          camera : Camera,
+          light_dir : Math::Vector3,
+          cascade_near : Float32,
+          cascade_far : Float32
+        ) : Math::Matrix4
           aspect = camera.viewport_width.to_f32 / camera.viewport_height.to_f32
           fov_rad = camera.field_of_view * ::Math::PI.to_f32 / 180.0f32
           slice_proj = Math::Matrix4.perspective(fov_rad, aspect, cascade_near, cascade_far)
-
-          # Get the 8 corners of this frustum slice in world space
           inv_vp = (slice_proj * camera.view_matrix).inverse
           corners = frustum_corners(inv_vp)
 
-          # Find the center of the frustum slice
           center = Math::Vector3.zero
           corners.each { |c| center = center + c }
           center = center * (1.0f32 / 8.0f32)
 
-          # Compute the radius (bounding sphere) for stable shadow edges
           radius = 0.0f32
           corners.each do |c|
-            dist = (c - center).magnitude
-            radius = dist if dist > radius
+            d = (c - center).magnitude
+            radius = d if d > radius
           end
-          # Round up to avoid sub-pixel jitter
-          radius = (radius * 16.0f32).ceil / 16.0f32
 
-          # Build light view/projection
-          # Push the light camera back by a large multiple of the radius so
-          # that shadow casters far behind the cascade slice (relative to the
-          # light direction) are not clipped by the ortho near/far planes.
-          light_dir = light.direction.normalize
-          depth_extent = radius * 4.0f32
-          light_pos = center - light_dir * depth_extent
-          light_view = Math::Matrix4.look_at(light_pos, center, Math::Vector3.new(0.0f32, 1.0f32, 0.0f32))
-          light_proj = Math::Matrix4.orthographic(-radius, radius, -radius, radius, 0.01f32, depth_extent * 2.0f32)
+          # Quantize to texel grid for stable edges
+          texel_size = (radius * 2.0f32) / @resolution.to_f32
+          radius = (radius / texel_size).ceil * texel_size
 
-          # Snap to texel grid to prevent shadow shimmer when camera moves
+          # Up vector handling for straight-down lights
+          up = if light_dir.y.abs > 0.99f32
+                 Math::Vector3.new(0.0f32, 0.0f32, 1.0f32)
+               else
+                 Math::Vector3.new(0.0f32, 1.0f32, 0.0f32)
+               end
+
+          # Push light camera far back to capture all shadow casters
+          back_dist = radius * 10.0f32
+          light_pos = center - light_dir * back_dist
+
+          light_view = Math::Matrix4.look_at(light_pos, center, up)
+          light_proj = Math::Matrix4.orthographic(
+            -radius, radius, -radius, radius,
+            0.0f32, back_dist * 2.0f32
+          )
+
+          # Texel snapping to prevent shimmer
           shadow_matrix = light_proj * light_view
           origin = shadow_matrix * Math::Vector4.new(0.0f32, 0.0f32, 0.0f32, 1.0f32)
-          texel_size = (radius * 2.0f32) / @resolution.to_f32
-          origin_x = origin.x / texel_size
-          origin_y = origin.y / texel_size
-          round_x = origin_x.round - origin_x
-          round_y = origin_y.round - origin_y
-          round_x *= texel_size
-          round_y *= texel_size
+          snap_x = (origin.x / texel_size).round * texel_size - origin.x
+          snap_y = (origin.y / texel_size).round * texel_size - origin.y
 
           light_proj = Math::Matrix4.orthographic(
-            -radius + round_x, radius + round_x,
-            -radius + round_y, radius + round_y,
-            0.01f32, depth_extent * 2.0f32
+            -radius + snap_x, radius + snap_x,
+            -radius + snap_y, radius + snap_y,
+            0.0f32, back_dist * 2.0f32
           )
 
           light_proj * light_view
@@ -190,8 +188,14 @@ module Tachyon
           corners
         end
 
-        private def create_cascade(index : Int32)
-          # Depth texture
+        private def build_open_near_frustum(light_matrix : Math::Matrix4) : Math::Frustum
+          frustum = Math::Frustum.new(light_matrix)
+          planes = frustum.planes
+          planes[4] = Math::Vector4.new(0.0f32, 0.0f32, 0.0f32, 1.0f32)
+          Math::Frustum.new(planes)
+        end
+
+        private def create_cascade_fbo(index : Int32)
           tex = 0_u32
           LibGL.glGenTextures(1, pointerof(tex))
           @depth_textures[index] = tex
@@ -202,17 +206,18 @@ module Tachyon
             @resolution, @resolution, 0,
             LibGL::GL_DEPTH_COMPONENT, LibGL::GL_FLOAT, Pointer(Void).null
           )
-          LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_MIN_FILTER, LibGL::GL_LINEAR.to_i32)
-          LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_MAG_FILTER, LibGL::GL_LINEAR.to_i32)
+
+          # NEAREST — we read raw depth and do manual PCF
+          LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_MIN_FILTER, LibGL::GL_NEAREST.to_i32)
+          LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_MAG_FILTER, LibGL::GL_NEAREST.to_i32)
           LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_WRAP_S, LibGL::GL_CLAMP_TO_BORDER.to_i32)
           LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_WRAP_T, LibGL::GL_CLAMP_TO_BORDER.to_i32)
-          border_color = StaticArray[1.0f32, 1.0f32, 1.0f32, 1.0f32]
-          LibGL.glTexParameterfv(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_BORDER_COLOR, border_color.to_unsafe)
-          LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_COMPARE_MODE, LibGL::GL_COMPARE_REF_TO_TEXTURE.to_i32)
-          LibGL.glTexParameteri(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_COMPARE_FUNC, LibGL::GL_LEQUAL.to_i32)
+          border = StaticArray[1.0f32, 1.0f32, 1.0f32, 1.0f32]
+          LibGL.glTexParameterfv(LibGL::GL_TEXTURE_2D, LibGL::GL_TEXTURE_BORDER_COLOR, border.to_unsafe)
+
+          # NO compare mode — fragment shader does its own comparison
           LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, 0)
 
-          # Framebuffer
           fbo = 0_u32
           LibGL.glGenFramebuffers(1, pointerof(fbo))
           @frame_buffers[index] = fbo

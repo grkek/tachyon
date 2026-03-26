@@ -6,7 +6,7 @@ module Tachyon
       @shader : Shader
       @quad_vao : LibGL::GLuint = 0_u32
       @quad_vbo : LibGL::GLuint = 0_u32
-      @font : Font
+      @font_manager : GraphicalUserInterface::FontManager? = nil
       @sprites : Array(Sprite) = [] of Sprite
       @projection : Math::Matrix4 = Math::Matrix4.identity
       @bg_r : Float32 = 0.0f32
@@ -31,9 +31,15 @@ module Tachyon
 
       def initialize
         @shader = Shader.from_file("gui")
-        @font = Font.new
         @default_texture = Texture.solid_color(255_u8, 255_u8, 255_u8, 255_u8)
         setup_quad
+      end
+
+      def font_manager : GraphicalUserInterface::FontManager?
+        @font_manager
+      end
+
+      def font_manager=(@font_manager : GraphicalUserInterface::FontManager?)
       end
 
       def setup(width : Float32, height : Float32)
@@ -92,7 +98,29 @@ module Tachyon
       end
 
       def draw_text(text : String, x : Float32, y : Float32, scale : Float32 = 2.0f32,
-                    r : Float32 = 1.0f32, g : Float32 = 1.0f32, b : Float32 = 1.0f32, a : Float32 = 1.0f32)
+                    r : Float32 = 1.0f32, g : Float32 = 1.0f32, b : Float32 = 1.0f32, a : Float32 = 1.0f32,
+                    font_id : Int32 = 0)
+        if font_id > 0 && (fm = @font_manager)
+          draw_text_ttf(fm, text, x, y, scale, r, g, b, a, font_id)
+        else
+          draw_text_bitmap(text, x, y, scale, r, g, b, a)
+        end
+      end
+
+      def destroy
+        @shader.destroy
+        @default_texture.destroy
+        LibGL.glDeleteVertexArrays(1, pointerof(@quad_vao))
+        LibGL.glDeleteBuffers(1, pointerof(@quad_vbo))
+      end
+
+      private def draw_text_bitmap(text : String, x : Float32, y : Float32, scale : Float32,
+                                    r : Float32, g : Float32, b : Float32, a : Float32)
+        fm = @font_manager
+        return unless fm
+
+        font = fm.bitmap_font
+
         @shader.use
         @shader.set_matrix4("uProjection", @projection)
         @shader.set_int("uHasTexture", 1)
@@ -100,15 +128,15 @@ module Tachyon
         @shader.set_color("uColor", r, g, b, a)
 
         LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
-        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, @font.texture_id)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, font.texture_id)
         @shader.set_int("uTexture", 0)
 
-        char_w = @font.char_width.to_f32 * scale
-        char_h = @font.char_height.to_f32 * scale
+        char_w = font.char_width.to_f32 * scale
+        char_h = font.char_height.to_f32 * scale
         cursor_x = x
 
         text.each_char do |c|
-          u0, v0, u1, v1 = @font.char_uv(c)
+          u0, v0, u1, v1 = font.char_uv(c)
 
           char_verts = StaticArray[
             0.0f32, 0.0f32, u0, v0,
@@ -137,12 +165,57 @@ module Tachyon
         LibGL.glBindVertexArray(0)
       end
 
-      def destroy
-        @shader.destroy
-        @font.destroy
-        @default_texture.destroy
-        LibGL.glDeleteVertexArrays(1, pointerof(@quad_vao))
-        LibGL.glDeleteBuffers(1, pointerof(@quad_vbo))
+      private def draw_text_ttf(fm : GraphicalUserInterface::FontManager, text : String, x : Float32, y : Float32, scale : Float32,
+                                 r : Float32, g : Float32, b : Float32, a : Float32, font_id : Int32)
+        font = fm.get(font_id)
+        return draw_text_bitmap(text, x, y, scale, r, g, b, a) unless font
+
+        @shader.use
+        @shader.set_matrix4("uProjection", @projection)
+        @shader.set_int("uHasTexture", 1)
+        @shader.set_int("uIsText", 1)
+        @shader.set_color("uColor", r, g, b, a)
+
+        LibGL.glActiveTexture(LibGL::GL_TEXTURE0)
+        LibGL.glBindTexture(LibGL::GL_TEXTURE_2D, font.texture_id)
+        @shader.set_int("uTexture", 0)
+
+        cursor_x = x
+
+        text.each_char do |c|
+          glyph = font.glyphs[c]?
+          next unless glyph
+
+          gx = cursor_x + glyph.offset_x * scale
+          gy = y + (font.ascent + glyph.offset_y) * scale
+          gw = glyph.w * scale
+          gh = glyph.h * scale
+
+          char_verts = StaticArray[
+            0.0f32, 0.0f32, glyph.u0, glyph.v0,
+            1.0f32, 0.0f32, glyph.u1, glyph.v0,
+            1.0f32, 1.0f32, glyph.u1, glyph.v1,
+            0.0f32, 0.0f32, glyph.u0, glyph.v0,
+            1.0f32, 1.0f32, glyph.u1, glyph.v1,
+            0.0f32, 1.0f32, glyph.u0, glyph.v1,
+          ]
+
+          LibGL.glBindBuffer(LibGL::GL_ARRAY_BUFFER, @quad_vbo)
+          LibGL.glBufferData(LibGL::GL_ARRAY_BUFFER,
+            char_verts.size.to_i64 * sizeof(Float32),
+            char_verts.to_unsafe.as(Pointer(Void)),
+            LibGL::GL_DYNAMIC_DRAW)
+
+          @shader.set_vector2("uPosition", gx, gy)
+          @shader.set_vector2("uSize", gw, gh)
+
+          LibGL.glBindVertexArray(@quad_vao)
+          LibGL.glDrawArrays(LibGL::GL_TRIANGLES, 0, 6)
+
+          cursor_x += glyph.advance * scale
+        end
+
+        LibGL.glBindVertexArray(0)
       end
 
       private def draw_sprite(sprite : Sprite)

@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     # Per-frame data token passed through the pipeline stage by stage.
     # Each stage reads what it needs, writes its outputs, and passes it along.
     class Frame

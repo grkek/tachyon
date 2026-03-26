@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     # Executes an ordered list of stages, passing a Frame through each one.
     # Provides a full API for runtime insertion, removal, reordering, and toggling.
     class Pipeline

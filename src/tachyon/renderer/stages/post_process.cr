@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Bloom, tone mapping, and FXAA post-processing stage
       class PostProcess < Base

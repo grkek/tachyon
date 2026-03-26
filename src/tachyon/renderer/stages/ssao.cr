@@ -1,5 +1,5 @@
 module Tachyon
-  module Rendering
+  module Renderer
     module Stages
       # Screen-space ambient occlusion pass
       class SSAO < Base

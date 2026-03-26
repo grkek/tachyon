@@ -1,5 +1,4 @@
 module Tachyon
-  # Manages a GTK GL area, camera, scene, and the rendering pipeline
   class Viewport
     Log = ::Log.for(self)
 
@@ -8,7 +7,8 @@ module Tachyon
     getter scene : Scene::Graph
     getter camera : Renderer::Camera
     getter light_manager : Renderer::LightManager
-    getter pipeline : Rendering::Pipeline
+    getter font_manager : Renderer::GraphicalUserInterface::FontManager
+    getter pipeline : Renderer::Pipeline
     getter cursor : Scripting::Cursor? = nil
     getter audio_engine : Audio::Engine? = nil
 
@@ -20,10 +20,11 @@ module Tachyon
       @scene = Scene::Graph.new
       @camera = create_camera
       @light_manager = Renderer::LightManager.new
+      @font_manager = Renderer::GraphicalUserInterface::FontManager.new
 
-      context = Rendering::Context.new(@scene, @camera, @light_manager)
+      context = Renderer::Context.new(@scene, @camera, @light_manager)
 
-      @pipeline = Rendering::Pipeline.new(context)
+      @pipeline = Renderer::Pipeline.new(context)
 
       add_default_light
       setup_gl_area
@@ -35,19 +36,19 @@ module Tachyon
 
     # Typed accessors into pipeline stages for scripting and external use
     def canvas_2d : Renderer::Canvas?
-      @pipeline.find_by_type(Rendering::Stages::Canvas).try(&.canvas)
+      @pipeline.find_by_type(Renderer::Stages::Canvas).try(&.canvas)
     end
 
     def gui : Renderer::GraphicalUserInterface?
-      @pipeline.find_by_type(Rendering::Stages::Overlay).try(&.gui)
+      @pipeline.find_by_type(Renderer::Stages::Overlay).try(&.gui)
     end
 
     def particle_system : Renderer::ParticleSystem?
-      @pipeline.find_by_type(Rendering::Stages::Particles).try(&.particle_system)
+      @pipeline.find_by_type(Renderer::Stages::Particles).try(&.particle_system)
     end
 
     def post_process : Renderer::PostProcess?
-      @pipeline.find_by_type(Rendering::Stages::PostProcess).try(&.post_process)
+      @pipeline.find_by_type(Renderer::Stages::PostProcess).try(&.post_process)
     end
 
     # Hook called before each render with delta time
@@ -120,11 +121,22 @@ module Tachyon
       build_default_pipeline
       @pipeline.setup
 
+      wire_font_manager
+
       @cursor = Scripting::Cursor.new(@area)
       @last_frame_time = Time.utc
       @realized = true
 
       Log.info { "Viewport '#{@id}' realized with #{@pipeline.stages.size} stages" }
+    end
+
+    private def wire_font_manager
+      fm = @font_manager
+      return unless fm
+
+      if canvas = canvas_2d
+        canvas.font_manager = fm
+      end
     end
 
     private def setup_gl_defaults
@@ -136,19 +148,18 @@ module Tachyon
     end
 
     # Assemble the default 3D rendering pipeline with all stages
-    # NOTE: SSAO must come AFTER geometry (it reads the depth buffer)
     private def build_default_pipeline
-      @pipeline.add(Rendering::Stages::Canvas.new)
-      @pipeline.add(Rendering::Stages::Shadow.new)
-      @pipeline.add(Rendering::Stages::Geometry.new)
-      @pipeline.add(Rendering::Stages::SSAO.new)
-      @pipeline.add(Rendering::Stages::Skybox.new)
-      @pipeline.add(Rendering::Stages::Particles.new)
-      @pipeline.add(Rendering::Stages::PostProcess.new)
-      @pipeline.add(Rendering::Stages::Vignette.new)
-      @pipeline.add(Rendering::Stages::ChromaticAberration.new)
-      @pipeline.add(Rendering::Stages::ColorGrading.new)
-      @pipeline.add(Rendering::Stages::Overlay.new)
+      @pipeline.add(Renderer::Stages::Canvas.new)
+      @pipeline.add(Renderer::Stages::Shadow.new)
+      @pipeline.add(Renderer::Stages::Geometry.new)
+      @pipeline.add(Renderer::Stages::SSAO.new)
+      @pipeline.add(Renderer::Stages::Skybox.new)
+      @pipeline.add(Renderer::Stages::Particles.new)
+      @pipeline.add(Renderer::Stages::PostProcess.new)
+      @pipeline.add(Renderer::Stages::Vignette.new)
+      @pipeline.add(Renderer::Stages::ChromaticAberration.new)
+      @pipeline.add(Renderer::Stages::ColorGrading.new)
+      @pipeline.add(Renderer::Stages::Overlay.new)
     end
 
     private def on_render : Bool
