@@ -57,7 +57,7 @@ module Tachyon
     end
 
     # Push GUI draw calls into the rendering context
-    def submit_commands(commands : Array(Scripting::GUI::DrawCall))
+    def submit_commands(commands : Array(Scripting::GraphicalUserInterface::DrawCall))
       @pipeline.context.commands = commands
     end
 

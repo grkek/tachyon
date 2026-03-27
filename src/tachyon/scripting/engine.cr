@@ -8,7 +8,7 @@ module Tachyon
 
       getter registry : Registry
       getter input_state : InputState
-      getter commands : Array(GUI::DrawCall) = [] of GUI::DrawCall
+      getter commands : Array(GraphicalUserInterface::DrawCall) = [] of GraphicalUserInterface::DrawCall
 
       property cursor : Cursor? = nil
       property viewport : Viewport? = nil
@@ -502,16 +502,16 @@ module Tachyon
       # GUI draw call callbacks
       private def register_gui_callbacks(commands, canvas, font_manager)
         set_callback(CallbackSlot::GUIDrawRect, ->(x : Float32, y : Float32, w : Float32, h : Float32, r : Float32, g : Float32, b : Float32, a : Float32) {
-          call = GUI::DrawCall.new
-          call.command = GUI::Command::Rect
+          call = GraphicalUserInterface::DrawCall.new
+          call.command = GraphicalUserInterface::Command::Rect
           call.x = x; call.y = y; call.w = w; call.h = h
           call.r = r; call.g = g; call.b = b; call.a = a
           commands << call
         })
 
         set_callback(CallbackSlot::GUIDrawText, ->(text_ptr : LibC::Char*, x : Float32, y : Float32, scale : Float32, r : Float32, g : Float32, b : Float32, a : Float32) {
-          call = GUI::DrawCall.new
-          call.command = GUI::Command::Text
+          call = GraphicalUserInterface::DrawCall.new
+          call.command = GraphicalUserInterface::Command::Text
           call.text = String.new(text_ptr)
           call.x = x; call.y = y; call.scale = scale
           call.r = r; call.g = g; call.b = b; call.a = a
@@ -524,15 +524,15 @@ module Tachyon
 
         # Bevel commands (geometry only)
         set_callback(CallbackSlot::GUIDrawBevelRaised, ->(x : Float32, y : Float32, w : Float32, h : Float32, _a : Float32, _b : Float32, _c : Float32, _d : Float32) {
-          call = GUI::DrawCall.new
-          call.command = GUI::Command::BevelRaised
+          call = GraphicalUserInterface::DrawCall.new
+          call.command = GraphicalUserInterface::Command::BevelRaised
           call.x = x; call.y = y; call.w = w; call.h = h
           commands << call
         })
 
         set_callback(CallbackSlot::GUIDrawBevelSunken, ->(x : Float32, y : Float32, w : Float32, h : Float32, _a : Float32, _b : Float32, _c : Float32, _d : Float32) {
-          call = GUI::DrawCall.new
-          call.command = GUI::Command::BevelSunken
+          call = GraphicalUserInterface::DrawCall.new
+          call.command = GraphicalUserInterface::Command::BevelSunken
           call.x = x; call.y = y; call.w = w; call.h = h
           commands << call
         })
@@ -559,8 +559,8 @@ module Tachyon
             state : Int32, value : Float32,
             text_ptr : LibC::Char*, font_id : Int32
           ) {
-            call = GUI::DrawCall.new
-            call.command = GUI::Command::{{ cmd_pair[1].id }}
+            call = GraphicalUserInterface::DrawCall.new
+            call.command = GraphicalUserInterface::Command::{{ cmd_pair[1].id }}
             call.x = x; call.y = y; call.w = w; call.h = h
             call.r = r1; call.g = g1; call.b = b1; call.a = a1
             call.r2 = r2; call.g2 = g2; call.b2 = b2; call.a2 = a2
@@ -596,8 +596,8 @@ module Tachyon
 
         set_callback(CallbackSlot::CanvasText, ->(text_ptr : LibC::Char*, x : Float32, y : Float32, scale : Float32, r : Float32, g : Float32, b : Float32, a : Float32) {
           if cv = canvas
-            call = GUI::DrawCall.new
-            call.command = GUI::Command::Text
+            call = GraphicalUserInterface::DrawCall.new
+            call.command = GraphicalUserInterface::Command::Text
             call.text = String.new(text_ptr)
             call.x = x; call.y = y; call.scale = scale
             call.r = r; call.g = g; call.b = b; call.a = a

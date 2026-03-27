@@ -1,6 +1,6 @@
 module Tachyon
   module Scripting
-    module GUI
+    module GraphicalUserInterface
       class DrawCall
         property command : Command = Command::Rect
 

@@ -57,7 +57,7 @@ module Tachyon
 
           commands.each do |cmd|
             case cmd.command
-            when Scripting::GUI::Command::Text
+            when Scripting::GraphicalUserInterface::Command::Text
               canvas.draw_text(cmd.text, cmd.x, cmd.y, cmd.scale, cmd.r, cmd.g, cmd.b, cmd.a)
             end
           end

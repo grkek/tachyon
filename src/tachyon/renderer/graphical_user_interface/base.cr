@@ -286,17 +286,20 @@ module Tachyon
         end
 
         def draw_rich_text(cmd : Scripting::GUI::DrawCall)
-          draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
-          draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
+          if cmd.a > 0.001f32
+            draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
+            draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
+          end
 
           unless cmd.text.empty?
-            tc = Theme::TEXT_PRIMARY
+            tr = cmd.r2 > 0.001f32 || cmd.g2 > 0.001f32 || cmd.b2 > 0.001f32 ? {cmd.r2, cmd.g2, cmd.b2} : Theme::TEXT_PRIMARY
+            ta = cmd.a2 > 0.001f32 ? cmd.a2 : 1.0f32
             line_h = cmd.scale * 14
             lines = cmd.text.split('\n')
             ty = cmd.y + 4
             lines.each do |line|
               break if ty + line_h > cmd.y + cmd.h - 4
-              draw_text(line, cmd.x + 4, ty, cmd.scale, tc[0], tc[1], tc[2], cmd.a, cmd.font_id)
+              draw_text(line, cmd.x + 4, ty, cmd.scale, tr[0], tr[1], tr[2], ta, cmd.font_id)
               ty += line_h
             end
           end
