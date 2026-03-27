@@ -115,7 +115,7 @@ module Tachyon
           draw_rect(x + w - 2, y + 1, 1, h - 1, lt[0], lt[1], lt[2], 0.5f32)
         end
 
-        def draw_panel(cmd : Scripting::GUI::DrawCall)
+        def draw_panel(cmd : Scripting::GraphicalUserInterface::DrawCall)
           bg = {cmd.r, cmd.g, cmd.b}
           draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, bg[0], bg[1], bg[2], cmd.a)
           draw_bevel_raised(cmd.x, cmd.y, cmd.w, cmd.h)
@@ -129,7 +129,7 @@ module Tachyon
           end
         end
 
-        def draw_button(cmd : Scripting::GUI::DrawCall)
+        def draw_button(cmd : Scripting::GraphicalUserInterface::DrawCall)
           if cmd.active?
             draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, cmd.r2, cmd.g2, cmd.b2, cmd.a)
             draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
@@ -155,7 +155,7 @@ module Tachyon
           end
         end
 
-        def draw_checkbox(cmd : Scripting::GUI::DrawCall)
+        def draw_checkbox(cmd : Scripting::GraphicalUserInterface::DrawCall)
           sz = Theme::CHECKBOX_SIZE.to_f32
 
           draw_rect(cmd.x, cmd.y, sz, sz, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
@@ -172,7 +172,7 @@ module Tachyon
           end
         end
 
-        def draw_combobox(cmd : Scripting::GUI::DrawCall)
+        def draw_combobox(cmd : Scripting::GraphicalUserInterface::DrawCall)
           draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
           draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
 
@@ -195,7 +195,7 @@ module Tachyon
           end
         end
 
-        def draw_list_row(cmd : Scripting::GUI::DrawCall)
+        def draw_list_row(cmd : Scripting::GraphicalUserInterface::DrawCall)
           if cmd.active?
             draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::ACCENT[0], Theme::ACCENT[1], Theme::ACCENT[2], cmd.a * 0.8f32)
           elsif cmd.hovered?
@@ -210,7 +210,7 @@ module Tachyon
           draw_rect(cmd.x, cmd.y + cmd.h - 1, cmd.w, 1, Theme::DIVIDER[0], Theme::DIVIDER[1], Theme::DIVIDER[2], cmd.a * 0.3f32)
         end
 
-        def draw_progress_bar(cmd : Scripting::GUI::DrawCall)
+        def draw_progress_bar(cmd : Scripting::GraphicalUserInterface::DrawCall)
           draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
           draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
 
@@ -228,7 +228,7 @@ module Tachyon
           end
         end
 
-        def draw_slider(cmd : Scripting::GUI::DrawCall)
+        def draw_slider(cmd : Scripting::GraphicalUserInterface::DrawCall)
           if cmd.vertical?
             draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
             draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
@@ -256,7 +256,7 @@ module Tachyon
           end
         end
 
-        def draw_divider(cmd : Scripting::GUI::DrawCall)
+        def draw_divider(cmd : Scripting::GraphicalUserInterface::DrawCall)
           dk = Theme::BEVEL_DARK
           lt = Theme::BEVEL_LIGHT
 
@@ -269,7 +269,7 @@ module Tachyon
           end
         end
 
-        def draw_text_entry(cmd : Scripting::GUI::DrawCall)
+        def draw_text_entry(cmd : Scripting::GraphicalUserInterface::DrawCall)
           draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
           draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
 
@@ -285,7 +285,7 @@ module Tachyon
           end
         end
 
-        def draw_rich_text(cmd : Scripting::GUI::DrawCall)
+        def draw_rich_text(cmd : Scripting::GraphicalUserInterface::DrawCall)
           if cmd.a > 0.001f32
             draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, Theme::BG_DARKER[0], Theme::BG_DARKER[1], Theme::BG_DARKER[2], cmd.a)
             draw_bevel_sunken(cmd.x, cmd.y, cmd.w, cmd.h)
@@ -305,7 +305,7 @@ module Tachyon
           end
         end
 
-        def process_command(cmd : Scripting::GUI::DrawCall)
+        def process_command(cmd : Scripting::GraphicalUserInterface::DrawCall)
           case cmd.command
           when .rect?
             draw_rect(cmd.x, cmd.y, cmd.w, cmd.h, cmd.r, cmd.g, cmd.b, cmd.a)
